@@ -4,7 +4,7 @@ Date: 2026-01-20
 
 ## Goal
 
-Create a new repo `greentic-ai/greentic-cards2pack` that:
+Create a new repo `greenticai/greentic-cards2pack` that:
 - reads a directory of Adaptive Card JSON files,
 - infers flows/steps/routes,
 - emits an **editable pack workspace directory** (pack.yaml + flows + assets),
@@ -171,3 +171,4 @@ Dev dependencies:
 
 - `GenerateArgs` already includes group-by/default-flow/strict fields so PR-02/03 can implement behavior without CLI breakage.
 - workspace uses `.cards2pack/manifest.json` so PR-03 can implement idempotent updates and safe regeneration.
+
