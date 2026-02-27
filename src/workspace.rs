@@ -23,11 +23,11 @@ use crate::tools::{
 };
 use serde_yaml_bw::{self, Value as YamlValue};
 
-const COMPONENT_REF: &str = "oci://ghcr.io/greentic-ai/components/component-adaptive-card:latest";
+const COMPONENT_REF: &str = "oci://ghcr.io/greenticai/components/component-adaptive-card:latest";
 const COMPONENT_MANIFEST_ENV: &str = "GREENTIC_COMPONENT_ADAPTIVE_CARD_MANIFEST";
 const COMPONENT_WASM_ENV: &str = "GREENTIC_COMPONENT_ADAPTIVE_CARD_WASM";
 const PROMPT_COMPONENT_REF: &str =
-    "oci://ghcr.io/greentic-ai/components/component-prompt2flow:latest";
+    "oci://ghcr.io/greenticai/components/component-prompt2flow:latest";
 
 pub fn generate(args: &GenerateArgs) -> Result<()> {
     if !args.cards.is_dir() {
@@ -817,3 +817,4 @@ nodes:
         assert!(message.contains(flow_path.to_str().unwrap()));
     }
 }
+

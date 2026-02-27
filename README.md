@@ -42,7 +42,7 @@ greentic-cards2pack generate \
 ```
 
 The generated flow uses the Adaptive Card component:
-`oci://ghcr.io/greentic-ai/components/component-adaptive-card:latest`.
+`oci://ghcr.io/greenticai/components/component-adaptive-card:latest`.
 
 ## Common Warnings
 
@@ -59,4 +59,5 @@ The generated flow uses the Adaptive Card component:
 
 - Use `--strict` to enforce consistent metadata and required targets.
 - The `.cards2pack/manifest.json` file records the scan results and warnings.
+
 
