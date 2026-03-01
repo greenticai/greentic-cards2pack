@@ -45,6 +45,9 @@ pub struct GenerateArgs {
     /// Prompt-based routing (requires prompt2flow component).
     #[arg(long)]
     pub prompt: bool,
+    /// Disable automatic card text extraction/rewriting to i18n markers.
+    #[arg(long = "no-auto-i18n")]
+    pub no_auto_i18n: bool,
     /// Answers JSON produced by greentic-qa (requires --prompt).
     #[arg(long = "prompt-json")]
     pub prompt_json: Option<PathBuf>,

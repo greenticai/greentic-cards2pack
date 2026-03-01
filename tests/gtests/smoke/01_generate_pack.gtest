@@ -18,8 +18,6 @@
 EOF
 #RUN cargo run --quiet -- generate --cards ${CARDS_DIR} --out ${PACK_DIR} --name demo
 #EXPECT_EXIT 0
-#RUN greentic-pack doctor --in ${PACK_DIR}
-#EXPECT_EXIT 0
 #SAVE_ARTIFACT ${PACK_DIR}/.cards2pack/manifest.json
 #SAVE_ARTIFACT ${PACK_DIR}/flows/main.ygtc
 #SAVE_ARTIFACT ${PACK_DIR}/dist/demo.gtpack

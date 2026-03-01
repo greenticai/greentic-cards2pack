@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -28,6 +29,14 @@ const COMPONENT_MANIFEST_ENV: &str = "GREENTIC_COMPONENT_ADAPTIVE_CARD_MANIFEST"
 const COMPONENT_WASM_ENV: &str = "GREENTIC_COMPONENT_ADAPTIVE_CARD_WASM";
 const PROMPT_COMPONENT_REF: &str =
     "oci://ghcr.io/greentic-ai/components/component-prompt2flow:latest";
+const PACK_I18N_LOCALES: &[&str] = &[
+    "ar", "ar-AE", "ar-DZ", "ar-EG", "ar-IQ", "ar-MA", "ar-SA", "ar-SD", "ar-SY", "ar-TN", "ay",
+    "bg", "bn", "cs", "da", "de", "el", "en", "en-GB", "es", "et", "fa", "fi", "fr", "gn", "gu",
+    "hi", "hr", "ht", "hu", "id", "it", "ja", "km", "kn", "ko", "lo", "lt", "lv", "ml", "mr", "ms",
+    "my", "nah", "ne", "nl", "no", "pa", "pl", "pt", "qu", "ro", "ru", "si", "sk", "sr", "sv",
+    "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "zh",
+];
+const CARD_I18N_PREFIX: &str = "cards";
 
 pub fn generate(args: &GenerateArgs) -> Result<()> {
     if !args.cards.is_dir() {
@@ -66,6 +75,9 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
         .with_context(|| format!("failed to create {}", state_dir.display()))?;
 
     copy_cards(&args.cards, &assets_cards)?;
+    if !args.no_auto_i18n {
+        scaffold_pack_i18n(&args.out, &assets_cards)?;
+    }
     ensure_readme(&args.out, &args.name)?;
 
     let prompt_limits = if args.prompt {
@@ -214,6 +226,371 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
 
     Ok(())
 }
+
+fn scaffold_pack_i18n(workspace_root: &Path, cards_root: &Path) -> Result<()> {
+    let i18n_dir = workspace_root.join("assets").join("i18n");
+    fs::create_dir_all(&i18n_dir)
+        .with_context(|| format!("failed to create {}", i18n_dir.display()))?;
+
+    let mut extracted = BTreeMap::<String, String>::new();
+    rewrite_cards_with_i18n_markers(cards_root, &mut extracted)?;
+
+    let en_path = i18n_dir.join("en.json");
+    write_en_locale(&en_path, extracted)?;
+
+    let locales_path = i18n_dir.join("locales.json");
+    let locales_json =
+        serde_json::to_string_pretty(PACK_I18N_LOCALES).context("serialize locales.json")?;
+    fs::write(&locales_path, format!("{locales_json}\n"))
+        .with_context(|| format!("failed to write {}", locales_path.display()))?;
+
+    ensure_locale_files(&i18n_dir)?;
+    write_pack_i18n_script(workspace_root)?;
+    Ok(())
+}
+
+fn rewrite_cards_with_i18n_markers(
+    cards_root: &Path,
+    extracted: &mut BTreeMap<String, String>,
+) -> Result<()> {
+    for entry in WalkDir::new(cards_root).into_iter().filter_map(Result::ok) {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+
+        let raw = match fs::read_to_string(path) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let mut value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let is_adaptive_card =
+            value.get("type").and_then(serde_json::Value::as_str) == Some("AdaptiveCard");
+        if !is_adaptive_card {
+            continue;
+        }
+
+        let rel = path
+            .strip_prefix(cards_root)
+            .with_context(|| format!("failed to strip prefix for {}", path.display()))?;
+        let card_prefix = card_key_prefix(rel);
+        let mut key_path = vec![CARD_I18N_PREFIX.to_string()];
+        key_path.extend(card_prefix);
+
+        let mut changed = false;
+        rewrite_value_for_i18n(&mut value, &mut key_path, extracted, &mut changed);
+        if changed {
+            let encoded = serde_json::to_string_pretty(&value).context("encode adaptive card")?;
+            fs::write(path, format!("{encoded}\n"))
+                .with_context(|| format!("failed to write {}", path.display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn card_key_prefix(rel_path: &Path) -> Vec<String> {
+    let mut segments = Vec::new();
+    for component in rel_path.components() {
+        segments.push(component.as_os_str().to_string_lossy().to_string());
+    }
+    if let Some(last) = segments.last_mut()
+        && let Some(stem) = Path::new(last).file_stem().and_then(|stem| stem.to_str())
+    {
+        *last = stem.to_string();
+    }
+    segments
+        .into_iter()
+        .map(|segment| sanitize_key_segment(&segment))
+        .collect()
+}
+
+fn rewrite_value_for_i18n(
+    value: &mut serde_json::Value,
+    key_path: &mut Vec<String>,
+    extracted: &mut BTreeMap<String, String>,
+    changed: &mut bool,
+) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map {
+                key_path.push(sanitize_key_segment(key));
+                if should_localize_field(key, child) {
+                    if let serde_json::Value::String(text) = child {
+                        let i18n_key = key_path.join(".");
+                        let original = text.clone();
+                        extracted.insert(i18n_key.clone(), original);
+                        let marker = format!("{{{{i18n:{i18n_key}}}}}");
+                        if *text != marker {
+                            *text = marker;
+                            *changed = true;
+                        }
+                    }
+                } else {
+                    rewrite_value_for_i18n(child, key_path, extracted, changed);
+                }
+                key_path.pop();
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for (idx, item) in items.iter_mut().enumerate() {
+                key_path.push(format!("i{idx}"));
+                rewrite_value_for_i18n(item, key_path, extracted, changed);
+                key_path.pop();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn should_localize_field(key: &str, value: &serde_json::Value) -> bool {
+    let is_text_field = matches!(
+        key,
+        "text" | "title" | "placeholder" | "errorMessage" | "label" | "altText" | "speak"
+    );
+    if !is_text_field {
+        return false;
+    }
+    let Some(text) = value.as_str() else {
+        return false;
+    };
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed.contains("{{") && !trimmed.contains("{{i18n:") {
+        return false;
+    }
+    if trimmed.starts_with("{{i18n:") && trimmed.ends_with("}}") {
+        return false;
+    }
+    if trimmed.starts_with("http://")
+        || trimmed.starts_with("https://")
+        || trimmed.starts_with("mailto:")
+    {
+        return false;
+    }
+    true
+}
+
+fn sanitize_key_segment(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+        } else if !out.ends_with('_') {
+            out.push('_');
+        }
+    }
+    let normalized = out.trim_matches('_');
+    if normalized.is_empty() {
+        "field".to_string()
+    } else {
+        normalized.to_string()
+    }
+}
+
+fn write_en_locale(en_path: &Path, extracted: BTreeMap<String, String>) -> Result<()> {
+    let mut merged = BTreeMap::<String, String>::new();
+    if en_path.exists()
+        && let Ok(raw) = fs::read_to_string(en_path)
+        && let Ok(existing) = serde_json::from_str::<BTreeMap<String, String>>(&raw)
+    {
+        for (key, value) in existing {
+            if !key.starts_with(&format!("{CARD_I18N_PREFIX}.")) {
+                merged.insert(key, value);
+            }
+        }
+    }
+    for (key, value) in extracted {
+        merged.insert(key, value);
+    }
+    let encoded = serde_json::to_string_pretty(&merged).context("serialize en.json")?;
+    fs::write(en_path, format!("{encoded}\n"))
+        .with_context(|| format!("failed to write {}", en_path.display()))?;
+    Ok(())
+}
+
+fn ensure_locale_files(i18n_dir: &Path) -> Result<()> {
+    for locale in PACK_I18N_LOCALES {
+        if *locale == "en" {
+            continue;
+        }
+        let locale_path = i18n_dir.join(format!("{locale}.json"));
+        if locale_path.exists() {
+            continue;
+        }
+        fs::write(&locale_path, "{\n}\n")
+            .with_context(|| format!("failed to write {}", locale_path.display()))?;
+    }
+    Ok(())
+}
+
+fn write_pack_i18n_script(workspace_root: &Path) -> Result<()> {
+    let tools_dir = workspace_root.join("tools");
+    fs::create_dir_all(&tools_dir)
+        .with_context(|| format!("failed to create {}", tools_dir.display()))?;
+    let script_path = tools_dir.join("i18n.sh");
+    fs::write(&script_path, PACK_I18N_SCRIPT)
+        .with_context(|| format!("failed to write {}", script_path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&script_path)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms)?;
+    }
+    Ok(())
+}
+
+const PACK_I18N_SCRIPT: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+I18N_DIR="$ROOT_DIR/assets/i18n"
+LOCALES_FILE="$I18N_DIR/locales.json"
+EN_FILE="$I18N_DIR/en.json"
+MODE="${1:-all}"
+LOCALE="${LOCALE:-en}"
+AUTH_MODE="${AUTH_MODE:-auto}"
+TRANSLATOR_BIN="${TRANSLATOR_BIN:-greentic-i18n-translator}"
+CODEX_SKIP_GIT_REPO_CHECK="${CODEX_SKIP_GIT_REPO_CHECK:-1}"
+
+fail() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+info() {
+  echo "info: $*"
+}
+
+usage() {
+  cat <<'USAGE'
+Usage: tools/i18n.sh [all|translate|validate|status]
+
+Environment overrides:
+  LOCALE=...          Locale for translator runtime messages (default: en)
+  AUTH_MODE=...       Auth mode for translate (default: auto)
+  TRANSLATOR_BIN=...  Translator command (default: greentic-i18n-translator)
+  CODEX_SKIP_GIT_REPO_CHECK=0|1  Add --skip-git-repo-check to codex exec (default: 1)
+USAGE
+}
+
+require_files() {
+  [[ -f "$LOCALES_FILE" ]] || fail "missing $LOCALES_FILE"
+  [[ -f "$EN_FILE" ]] || fail "missing $EN_FILE"
+}
+
+resolve_translator_bin() {
+  if command -v "$TRANSLATOR_BIN" >/dev/null 2>&1; then
+    return 0
+  fi
+  fail "translator binary not found on PATH: $TRANSLATOR_BIN"
+}
+
+load_locales() {
+  mapfile -t LOCALES < <(python3 - <<'PY' "$LOCALES_FILE"
+import json, sys
+for item in json.load(open(sys.argv[1], encoding="utf-8")):
+    print(item)
+PY
+)
+  LOCALES_CSV="$(IFS=,; echo "${LOCALES[*]}")"
+}
+
+ensure_locale_files() {
+  for locale in "${LOCALES[@]}"; do
+    file="$I18N_DIR/$locale.json"
+    if [[ ! -f "$file" ]]; then
+      mkdir -p "$(dirname "$file")"
+      printf "{\n}\n" > "$file"
+    fi
+  done
+}
+
+setup_codex_wrapper_if_needed() {
+  if [[ "$CODEX_SKIP_GIT_REPO_CHECK" != "1" ]]; then
+    return 0
+  fi
+  if ! command -v codex >/dev/null 2>&1; then
+    return 0
+  fi
+  local real_codex
+  real_codex="$(command -v codex)"
+  local wrapper_dir
+  wrapper_dir="$(mktemp -d)"
+  cat > "$wrapper_dir/codex" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "exec" ]]; then
+  shift
+  exec "$real_codex" exec --skip-git-repo-check "\$@"
+fi
+exec "$real_codex" "\$@"
+EOF
+  chmod +x "$wrapper_dir/codex"
+  export PATH="$wrapper_dir:$PATH"
+}
+
+run_translate() {
+  info "running translate for $(echo "$LOCALES_CSV" | tr ',' ' ' | wc -w) locales from $EN_FILE"
+  setup_codex_wrapper_if_needed
+  "$TRANSLATOR_BIN" --locale "$LOCALE" \
+    translate --langs "$LOCALES_CSV" --en "$EN_FILE" --auth-mode "$AUTH_MODE"
+}
+
+run_validate() {
+  info "running validate for $(echo "$LOCALES_CSV" | tr ',' ' ' | wc -w) locales from $EN_FILE"
+  "$TRANSLATOR_BIN" --locale "$LOCALE" \
+    validate --langs "$LOCALES_CSV" --en "$EN_FILE"
+}
+
+run_status() {
+  info "running status for $(echo "$LOCALES_CSV" | tr ',' ' ' | wc -w) locales from $EN_FILE"
+  "$TRANSLATOR_BIN" --locale "$LOCALE" \
+    status --langs "$LOCALES_CSV" --en "$EN_FILE"
+}
+
+if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+require_files
+resolve_translator_bin
+load_locales
+ensure_locale_files
+info "mode=$MODE locale=$LOCALE translator=$TRANSLATOR_BIN"
+
+case "$MODE" in
+  all)
+    run_translate
+    run_validate
+    run_status
+    ;;
+  translate)
+    run_translate
+    ;;
+  validate)
+    run_validate
+    ;;
+  status)
+    run_status
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+"#;
 
 fn copy_cards(cards_dir: &Path, dest_root: &Path) -> Result<()> {
     for entry in WalkDir::new(cards_dir).into_iter().filter_map(Result::ok) {
