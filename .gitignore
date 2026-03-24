@@ -1,3 +1,6 @@
 /target
 artifacts/
 .greentic/
+
+# OS
+.DS_Store
