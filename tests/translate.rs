@@ -101,8 +101,8 @@ fn generate_auto_translate_default_languages() {
         .success();
 
     let i18n_dir = out_dir.join("assets/i18n");
-    // Default: fr, de, es, ja, zh
-    for lang in &["fr", "de", "es", "ja", "zh"] {
+    // Default: all supported locales (spot-check a few)
+    for lang in &["fr", "de", "es", "ja", "zh", "ar", "ko", "pt", "ru", "vi"] {
         assert!(
             i18n_dir.join(format!("{lang}.json")).is_file(),
             "{lang}.json should be created by default"

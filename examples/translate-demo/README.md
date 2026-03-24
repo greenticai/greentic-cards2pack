@@ -86,4 +86,4 @@ Then copy `i18n/` into `my-pack/assets/i18n/`.
 
 ## Default Languages
 
-If `--langs` is omitted with `--auto-translate`, these languages are used: `fr`, `de`, `es`, `ja`, `zh`.
+If `--langs` is omitted with `--auto-translate`, all supported locales are translated (65+ languages). Use `--langs fr,de` to limit to specific languages.
