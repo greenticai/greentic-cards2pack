@@ -76,7 +76,7 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
         .with_context(|| format!("failed to create {}", state_dir.display()))?;
 
     copy_cards(&args.cards, &assets_cards)?;
-    if !args.no_auto_i18n {
+    if !args.no_auto_i18n && !args.auto_translate {
         scaffold_pack_i18n(&args.out, &assets_cards)?;
     }
     ensure_readme(&args.out, &args.name)?;
@@ -232,25 +232,50 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
     }
 
     let gtpack_out = dist_dir.join(format!("{}.gtpack", args.name));
-    let build_output =
-        run_greentic_pack_build(&greentic_pack_bin, &args.out, &gtpack_out, args.verbose)?;
-    if !gtpack_out.exists()
-        && let Some(path) = extract_gtpack_path(&build_output)
-        && path.exists()
-    {
-        fs::copy(&path, &gtpack_out).with_context(|| {
-            format!(
-                "failed to copy greentic-pack output {} to {}",
-                path.display(),
-                gtpack_out.display()
-            )
-        })?;
+    match run_greentic_pack_build(&greentic_pack_bin, &args.out, &gtpack_out, args.verbose) {
+        Ok(build_output) => {
+            if !gtpack_out.exists()
+                && let Some(path) = extract_gtpack_path(&build_output)
+                && path.exists()
+            {
+                fs::copy(&path, &gtpack_out).with_context(|| {
+                    format!(
+                        "failed to copy greentic-pack output {} to {}",
+                        path.display(),
+                        gtpack_out.display()
+                    )
+                })?;
+            }
+        }
+        Err(err) => {
+            if args.strict {
+                return Err(err);
+            }
+            manifest.warnings.push(warning(
+                WarningKind::Validation,
+                format!("greentic-pack build failed: {err}"),
+            ));
+        }
     }
 
-    let (gtpack_path, gtpack_warning) = ensure_named_gtpack(&dist_dir, &args.name)?;
-    if let Some(warning) = gtpack_warning {
-        manifest.warnings.push(warning);
-    }
+    let gtpack_path = match ensure_named_gtpack(&dist_dir, &args.name) {
+        Ok((path, w)) => {
+            if let Some(warning) = w {
+                manifest.warnings.push(warning);
+            }
+            path
+        }
+        Err(err) => {
+            if args.strict {
+                return Err(err);
+            }
+            manifest.warnings.push(warning(
+                WarningKind::PackOutput,
+                format!("gtpack not produced: {err}"),
+            ));
+            dist_dir.join(format!("{}.gtpack", args.name))
+        }
+    };
 
     let flow_summaries: Vec<FlowSummary> = manifest
         .flows
