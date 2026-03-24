@@ -19,7 +19,14 @@ const TRANSLATOR_DEFAULT_BIN: &str = "greentic-i18n-translator";
 use crate::i18n_extract::{self, ExtractConfig};
 
 /// Default target languages when --langs is not specified.
-const DEFAULT_LANGUAGES: &[&str] = &["fr", "de", "es", "ja", "zh"];
+/// Matches the full locale list from `PACK_I18N_LOCALES` (minus "en").
+const DEFAULT_LANGUAGES: &[&str] = &[
+    "ar", "ar-AE", "ar-DZ", "ar-EG", "ar-IQ", "ar-MA", "ar-SA", "ar-SD", "ar-SY", "ar-TN", "ay",
+    "bg", "bn", "cs", "da", "de", "el", "en-GB", "es", "et", "fa", "fi", "fr", "gn", "gu",
+    "hi", "hr", "ht", "hu", "id", "it", "ja", "km", "kn", "ko", "lo", "lt", "lv", "ml", "mr",
+    "ms", "my", "nah", "ne", "nl", "no", "pa", "pl", "pt", "qu", "ro", "ru", "si", "sk", "sr",
+    "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "zh",
+];
 
 /// Configuration for the auto-translation step.
 #[derive(Debug, Clone)]
@@ -103,30 +110,61 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
         );
     }
 
-    // Step 2: Translate to each target language
-    let languages = if config.languages.is_empty() {
+    // Step 2: Translate to each target language (parallel, max 8 concurrent)
+    let languages: Vec<String> = if config.languages.is_empty() {
         DEFAULT_LANGUAGES.iter().map(|s| s.to_string()).collect()
     } else {
         config.languages.clone()
     };
 
+    const MAX_CONCURRENT: usize = 8;
+
     let mut languages_translated = Vec::new();
     let mut languages_failed = Vec::new();
 
-    for lang in &languages {
-        match translate_to_language(config, lang, &en_bundle_path) {
+    if config.verbose {
+        eprintln!(
+            "[translate] Translating to {} languages ({} concurrent)",
+            languages.len(),
+            MAX_CONCURRENT
+        );
+    }
+
+    let results: Vec<(String, Result<()>)> = std::thread::scope(|scope| {
+        let mut all_results = Vec::new();
+        for chunk in languages.chunks(MAX_CONCURRENT) {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|lang| {
+                    let lang = lang.clone();
+                    let en_path = en_bundle_path.clone();
+                    scope.spawn(move || {
+                        let result = translate_to_language(config, &lang, &en_path);
+                        (lang, result)
+                    })
+                })
+                .collect();
+            for handle in handles {
+                all_results.push(handle.join().unwrap());
+            }
+        }
+        all_results
+    });
+
+    for (lang, result) in results {
+        match result {
             Ok(()) => {
                 if config.verbose {
-                    eprintln!("[translate] Successfully translated to {}", lang);
+                    eprintln!("[translate] Successfully translated to {lang}");
                 }
-                languages_translated.push(lang.clone());
+                languages_translated.push(lang);
             }
             Err(err) => {
-                let error_msg = format!("{:#}", err);
+                let error_msg = format!("{err:#}");
                 if config.verbose {
-                    eprintln!("[translate] Failed to translate to {}: {}", lang, error_msg);
+                    eprintln!("[translate] Failed to translate to {lang}: {error_msg}");
                 }
-                languages_failed.push((lang.clone(), error_msg));
+                languages_failed.push((lang, error_msg));
             }
         }
     }
