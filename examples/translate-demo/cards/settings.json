@@ -1,0 +1,35 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Settings",
+      "size": "Medium",
+      "weight": "Bolder"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "language",
+      "label": "Preferred Language",
+      "choices": [
+        { "title": "English", "value": "en" },
+        { "title": "French", "value": "fr" },
+        { "title": "German", "value": "de" }
+      ]
+    },
+    {
+      "type": "Input.Toggle",
+      "id": "notifications",
+      "title": "Enable Notifications",
+      "value": "true"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Save Settings",
+      "data": { "action": "save_settings" }
+    }
+  ]
+}

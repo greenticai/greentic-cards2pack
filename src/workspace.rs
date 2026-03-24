@@ -22,6 +22,7 @@ use crate::tools::{
     run_greentic_pack_doctor, run_greentic_pack_new, run_greentic_pack_resolve,
     run_greentic_pack_update,
 };
+use crate::translate::{self, TranslateConfig, run_auto_translate};
 use serde_yaml_bw::{self, Value as YamlValue};
 
 const COMPONENT_REF: &str = "oci://ghcr.io/greentic-ai/components/component-adaptive-card:latest";
@@ -80,6 +81,50 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
     }
     ensure_readme(&args.out, &args.name)?;
 
+    // Auto-translation step (non-fatal)
+    let mut translation_warnings = Vec::new();
+    if args.auto_translate {
+        let i18n_output_dir = args.out.join("assets").join("i18n");
+        let translate_config = TranslateConfig {
+            cards_dir: assets_cards.clone(),
+            i18n_output_dir,
+            languages: args.langs.clone().unwrap_or_default(),
+            glossary: args.glossary.clone(),
+            verbose: args.verbose,
+        };
+
+        match run_auto_translate(&translate_config) {
+            Ok(result) => {
+                if args.verbose {
+                    println!("{}", translate::format_translation_summary(&result));
+                }
+                // Add warnings for failed translations
+                for (lang, error) in &result.languages_failed {
+                    translation_warnings.push(warning(
+                        WarningKind::Translation,
+                        format!("translation to {} failed: {}", lang, error),
+                    ));
+                }
+                if result.strings_extracted > 0 && result.languages_translated.is_empty() {
+                    translation_warnings.push(warning(
+                        WarningKind::Translation,
+                        "no languages were successfully translated".to_string(),
+                    ));
+                }
+            }
+            Err(err) => {
+                // Translation failure is non-fatal
+                translation_warnings.push(warning(
+                    WarningKind::Translation,
+                    format!("auto-translation failed: {}", err),
+                ));
+                if args.verbose {
+                    eprintln!("[translate] Warning: auto-translation failed: {}", err);
+                }
+            }
+        }
+    }
+
     let prompt_limits = if args.prompt {
         prompt_limits_from_arg(args.prompt_limits.as_deref())?.unwrap_or_default()
     } else {
@@ -108,6 +153,9 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
         strict: args.strict,
     };
     let mut manifest = scan_cards(&scan_config)?;
+
+    // Add translation warnings to manifest
+    manifest.warnings.extend(translation_warnings);
 
     let mut flow_paths = Vec::new();
     let mut readme_entries = Vec::new();

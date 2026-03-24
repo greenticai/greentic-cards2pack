@@ -1,0 +1,37 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "greentic": {
+    "cardId": "welcome"
+  },
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Welcome to Greentic!",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "How can I help you today?"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Get Started",
+      "data": {
+        "flow": "demo",
+        "step": "form-input"
+      }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "Contact Support",
+      "data": {
+        "flow": "demo",
+        "step": "detail-card"
+      }
+    }
+  ]
+}

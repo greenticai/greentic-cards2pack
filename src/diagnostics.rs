@@ -66,6 +66,7 @@ fn format_kind(kind: &WarningKind) -> &'static str {
         WarningKind::IgnoredFile => "ignored_file",
         WarningKind::PackOutput => "pack_output",
         WarningKind::Validation => "validation",
+        WarningKind::Translation => "translation",
     }
 }
 

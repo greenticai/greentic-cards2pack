@@ -69,6 +69,7 @@ pub enum WarningKind {
     IgnoredFile,
     PackOutput,
     Validation,
+    Translation,
 }
 
 #[derive(Debug, Serialize, Clone)]

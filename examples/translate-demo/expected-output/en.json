@@ -1,0 +1,13 @@
+{
+  "card.settings.body_0.text": "Settings",
+  "card.settings.body_1.label": "Preferred Language",
+  "card.settings.body_1_choices_0.title": "English",
+  "card.settings.body_1_choices_1.title": "French",
+  "card.settings.body_1_choices_2.title": "German",
+  "card.settings.body_2.title": "Enable Notifications",
+  "card.settings.actions_0.title": "Save Settings",
+  "card.welcome.body_0.text": "Welcome!",
+  "card.welcome.body_1.text": "How can I help you today?",
+  "card.welcome.actions_0.title": "Get Started",
+  "card.welcome.actions_1.title": "Contact Support"
+}

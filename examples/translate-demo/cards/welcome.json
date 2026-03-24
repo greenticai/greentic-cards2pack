@@ -1,0 +1,28 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Welcome!",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "How can I help you today?"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Get Started",
+      "data": { "action": "start" }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "Contact Support",
+      "data": { "action": "support" }
+    }
+  ]
+}
