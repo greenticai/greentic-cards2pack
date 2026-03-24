@@ -199,11 +199,12 @@ fn generate_without_auto_translate_no_i18n() {
         .arg("demo")
         .arg("--greentic-pack-bin")
         .arg(&greentic_pack)
+        .arg("--no-auto-i18n")
         .assert()
         .success();
 
     assert!(
         !out_dir.join("assets/i18n").exists(),
-        "i18n dir should not exist without --auto-translate"
+        "i18n dir should not exist with --no-auto-i18n and without --auto-translate"
     );
 }
