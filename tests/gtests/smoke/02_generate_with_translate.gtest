@@ -1,0 +1,27 @@
+#SET CARDS_DIR=${WORK_DIR}/cards
+#SET PACK_DIR=${WORK_DIR}/pack
+#MKDIR ${CARDS_DIR}
+#WRITE ${CARDS_DIR}/welcome.json <<<EOF
+{
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "body": [
+    { "type": "TextBlock", "text": "Welcome!", "size": "Large" },
+    { "type": "TextBlock", "text": "How can I help you?" }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Get Started",
+      "data": { "flow": "demo", "step": "next" }
+    }
+  ]
+}
+EOF
+#RUN cargo run --quiet -- generate --cards ${CARDS_DIR} --out ${PACK_DIR} --name demo --auto-translate --langs fr
+#EXPECT_EXIT 0
+#SAVE_ARTIFACT ${PACK_DIR}/assets/i18n/en.json
+#SAVE_ARTIFACT ${PACK_DIR}/assets/i18n/fr.json
+#SAVE_ARTIFACT ${PACK_DIR}/.cards2pack/manifest.json
+#SAVE_ARTIFACT ${PACK_DIR}/flows/main.ygtc
+#SAVE_ARTIFACT ${PACK_DIR}/dist/demo.gtpack

@@ -1,0 +1,37 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Please fill in your details"
+    },
+    {
+      "type": "Input.Text",
+      "id": "name",
+      "label": "Your Name",
+      "placeholder": "Enter your full name",
+      "errorMessage": "Name is required"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "department",
+      "label": "Department",
+      "choices": [
+        { "title": "Engineering", "value": "eng" },
+        { "title": "Sales", "value": "sales" },
+        { "title": "Support", "value": "support" }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Submit",
+      "data": {
+        "flow": "demo",
+        "step": "detail-card"
+      }
+    }
+  ]
+}

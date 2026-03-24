@@ -1,0 +1,41 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Request Summary",
+      "size": "Medium",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "$t(existing.key)",
+      "size": "Small"
+    },
+    {
+      "type": "Image",
+      "url": "https://example.com/logo.png",
+      "altText": "Company Logo"
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "Status", "value": "Pending Review" },
+        { "title": "Priority", "value": "High" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "{{template_var}}",
+      "fallbackText": "Content could not be loaded"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Confirm",
+      "data": { "action": "confirm" }
+    }
+  ]
+}

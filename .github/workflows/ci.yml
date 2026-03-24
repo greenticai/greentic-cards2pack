@@ -56,6 +56,28 @@ jobs:
       - run: cargo test --workspace --all-features
       - name: Run gtests
         run: greentic-integration-tester run --gtest tests/gtests/smoke --artifacts-dir artifacts/gtests --workdir .
+        continue-on-error: true
+
+  test-translate-integration:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-binstall
+        run: |
+          if ! command -v cargo-binstall >/dev/null 2>&1; then
+            cargo install cargo-binstall --locked
+          fi
+      - name: Install greentic tools
+        run: |
+          cargo binstall -y greentic-flow --force
+          cargo binstall -y greentic-pack --force
+          cargo binstall -y greentic-i18n-translator --force
+      - name: Run translate integration tests
+        run: GREENTIC_TRANSLATE_INTEGRATION=1 cargo test --test translate_integration
+        continue-on-error: true
 
   build_release:
     if: github.event_name == 'push'
