@@ -86,7 +86,7 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
     if args.auto_translate {
         let i18n_output_dir = args.out.join("assets").join("i18n");
         let translate_config = TranslateConfig {
-            cards_dir: assets_cards.clone(),
+            cards_dir: args.cards.clone(),
             i18n_output_dir,
             languages: args.langs.clone().unwrap_or_default(),
             glossary: args.glossary.clone(),
