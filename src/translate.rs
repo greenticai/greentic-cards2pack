@@ -22,10 +22,10 @@ use crate::i18n_extract::{self, ExtractConfig};
 /// Matches the full locale list from `PACK_I18N_LOCALES` (minus "en").
 const DEFAULT_LANGUAGES: &[&str] = &[
     "ar", "ar-AE", "ar-DZ", "ar-EG", "ar-IQ", "ar-MA", "ar-SA", "ar-SD", "ar-SY", "ar-TN", "ay",
-    "bg", "bn", "cs", "da", "de", "el", "en-GB", "es", "et", "fa", "fi", "fr", "gn", "gu",
-    "hi", "hr", "ht", "hu", "id", "it", "ja", "km", "kn", "ko", "lo", "lt", "lv", "ml", "mr",
-    "ms", "my", "nah", "ne", "nl", "no", "pa", "pl", "pt", "qu", "ro", "ru", "si", "sk", "sr",
-    "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "zh",
+    "bg", "bn", "cs", "da", "de", "el", "en-GB", "es", "et", "fa", "fi", "fr", "gn", "gu", "hi",
+    "hr", "ht", "hu", "id", "it", "ja", "km", "kn", "ko", "lo", "lt", "lv", "ml", "mr", "ms", "my",
+    "nah", "ne", "nl", "no", "pa", "pl", "pt", "qu", "ro", "ru", "si", "sk", "sr", "sv", "ta",
+    "te", "th", "tl", "tr", "uk", "ur", "vi", "zh",
 ];
 
 /// Configuration for the auto-translation step.

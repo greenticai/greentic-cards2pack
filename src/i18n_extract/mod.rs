@@ -96,8 +96,7 @@ pub fn extract_from_directory(config: &ExtractConfig) -> Result<Vec<ExtractedStr
             format!("{}.{}", config.prefix, card_id)
         };
 
-        let strings =
-            extract_from_value(&value, &full_prefix, "", path, config.skip_i18n_patterns);
+        let strings = extract_from_value(&value, &full_prefix, "", path, config.skip_i18n_patterns);
         all_strings.extend(strings);
     }
 
@@ -161,7 +160,13 @@ fn determine_card_id(path: &Path, value: &Value, cards_dir: &Path) -> Result<Str
 /// Sanitize a string for use as a key part.
 fn sanitize_key_part(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
         .to_lowercase()
 }

@@ -42,10 +42,38 @@ pub fn extract_from_value(
 
     match value {
         serde_json::Value::Object(obj) => {
-            extract_translatable_fields(obj, prefix, path, source_file, skip_i18n_patterns, &mut strings);
-            extract_container_fields(obj, prefix, path, source_file, skip_i18n_patterns, &mut strings);
-            extract_factset(obj, prefix, path, source_file, skip_i18n_patterns, &mut strings);
-            extract_choiceset(obj, prefix, path, source_file, skip_i18n_patterns, &mut strings);
+            extract_translatable_fields(
+                obj,
+                prefix,
+                path,
+                source_file,
+                skip_i18n_patterns,
+                &mut strings,
+            );
+            extract_container_fields(
+                obj,
+                prefix,
+                path,
+                source_file,
+                skip_i18n_patterns,
+                &mut strings,
+            );
+            extract_factset(
+                obj,
+                prefix,
+                path,
+                source_file,
+                skip_i18n_patterns,
+                &mut strings,
+            );
+            extract_choiceset(
+                obj,
+                prefix,
+                path,
+                source_file,
+                skip_i18n_patterns,
+                &mut strings,
+            );
         }
         serde_json::Value::Array(arr) => {
             for (i, item) in arr.iter().enumerate() {
@@ -273,8 +301,16 @@ mod tests {
         let strings = extract_from_value(&card, "test", "", Path::new("test.json"), true);
 
         assert_eq!(strings.len(), 2);
-        assert!(strings.iter().any(|s| s.key == "test.body_0.text" && s.value == "Hello World"));
-        assert!(strings.iter().any(|s| s.key == "test.actions_0.title" && s.value == "Submit"));
+        assert!(
+            strings
+                .iter()
+                .any(|s| s.key == "test.body_0.text" && s.value == "Hello World")
+        );
+        assert!(
+            strings
+                .iter()
+                .any(|s| s.key == "test.actions_0.title" && s.value == "Submit")
+        );
     }
 
     #[test]
