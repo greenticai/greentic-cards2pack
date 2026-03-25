@@ -77,7 +77,7 @@ if "%CMD%"=="update" (
   if exist "%OUT%\assets\config\prompt2flow.json" (
     echo components:>> "%OUT%\pack.yaml"
     echo   - id: ai.greentic.component-prompt2flow>> "%OUT%\pack.yaml"
-    echo     ref: oci://ghcr.io/greentic-ai/components/component-prompt2flow:latest>> "%OUT%\pack.yaml"
+    echo     ref: oci://ghcr.io/greenticai/components/component-prompt2flow:latest>> "%OUT%\pack.yaml"
   )
   exit /b 0
 )
@@ -172,7 +172,7 @@ EOF
       cat <<'EOF' >> "$out/pack.yaml"
 components:
   - id: ai.greentic.component-prompt2flow
-    ref: oci://ghcr.io/greentic-ai/components/component-prompt2flow:latest
+    ref: oci://ghcr.io/greenticai/components/component-prompt2flow:latest
 EOF
     fi
     ;;

@@ -42,7 +42,7 @@ greentic-cards2pack generate \
 ```
 
 The generated flow uses the Adaptive Card component:
-`oci://ghcr.io/greentic-ai/components/component-adaptive-card:latest`.
+`oci://ghcr.io/greenticai/components/component-adaptive-card:latest`.
 
 ## Common Warnings
 
