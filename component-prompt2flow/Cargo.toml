@@ -4,7 +4,7 @@ rust-version.workspace =true
 edition.workspace=true
 license = "MIT"
 description = "Prompt-to-flow routing component"
-repository = "https://github.com/greentic-ai/greentic-cards2pack"
+repository = "https://github.com/greenticai/greentic-cards2pack"
 readme = "README.md"
 
 [lib]
