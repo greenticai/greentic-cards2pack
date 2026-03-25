@@ -123,6 +123,12 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
                 }
             }
         }
+
+        // Rewrite asset cards with i18n markers after extracting from originals.
+        // Extraction reads the untouched original cards (args.cards), so we can
+        // safely rewrite the copies in assets/cards/ with {{i18n:...}} markers now.
+        let mut _rewrite_extracted = BTreeMap::<String, String>::new();
+        rewrite_cards_with_i18n_markers(&assets_cards, &mut _rewrite_extracted)?;
     }
 
     let prompt_limits = if args.prompt {
