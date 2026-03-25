@@ -185,12 +185,24 @@ fn resolve_translator_bin() -> String {
 }
 
 /// Translate the English bundle to a single target language.
+///
+/// Each invocation runs in its own temporary working directory to avoid
+/// race conditions on the shared `.i18n/translator-state.json` file
+/// when multiple translations run in parallel.
 fn translate_to_language(config: &TranslateConfig, lang: &str, en_bundle: &Path) -> Result<()> {
     let bin = resolve_translator_bin();
+
+    // Use a per-language temp directory so parallel translator processes
+    // don't clobber each other's state files.
+    let work_dir = std::env::temp_dir().join(format!("cards2pack-translate-{lang}"));
+    std::fs::create_dir_all(&work_dir)
+        .with_context(|| format!("failed to create translator work dir for {lang}"))?;
+
     let mut cmd = Command::new(&bin);
-    cmd.arg("translate")
+    cmd.current_dir(&work_dir)
+        .arg("translate")
         .arg("--langs")
-        .arg(lang) // Language code like "fr", not a path
+        .arg(lang)
         .arg("--en")
         .arg(en_bundle);
 
@@ -209,6 +221,9 @@ fn translate_to_language(config: &TranslateConfig, lang: &str, en_bundle: &Path)
     let output = cmd
         .output()
         .context("failed to execute greentic-i18n-translator")?;
+
+    // Clean up temp working directory (best-effort)
+    let _ = std::fs::remove_dir_all(&work_dir);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
