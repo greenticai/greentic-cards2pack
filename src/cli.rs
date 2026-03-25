@@ -5,6 +5,7 @@ use serde::Serialize;
 
 #[derive(Parser)]
 #[command(name = "greentic-cards2pack")]
+#[command(version)]
 #[command(about = "Generate Greentic pack workspace from Adaptive Cards", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
