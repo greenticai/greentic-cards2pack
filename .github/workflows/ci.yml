@@ -11,6 +11,10 @@ permissions:
 jobs:
   ci:
     uses: greenticai/.github/.github/workflows/host-crate-ci.yml@main
+    with:
+      setup-script: |
+        curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+        cargo binstall -y greentic-flow --force
 
   test-translate-integration:
     runs-on: ubuntu-latest

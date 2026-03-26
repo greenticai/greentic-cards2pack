@@ -343,7 +343,6 @@ mod tests {
 
     #[test]
     fn test_default_languages() {
-        assert!(!DEFAULT_LANGUAGES.is_empty());
         assert!(DEFAULT_LANGUAGES.contains(&"fr"));
         assert!(DEFAULT_LANGUAGES.contains(&"de"));
     }
