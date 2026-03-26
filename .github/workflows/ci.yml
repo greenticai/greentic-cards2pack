@@ -7,31 +7,17 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  fmt:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
+  ci:
+    uses: greenticai/.github/.github/workflows/host-crate-ci.yml@main
+    with:
+      setup-script: "if ! command -v cargo-binstall >/dev/null 2>&1; then cargo install cargo-binstall --locked; fi && cargo binstall -y greentic-flow --force"
 
-  clippy:
+  gtests:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-  test:
-    runs-on: ubuntu-latest
+    needs: [ci]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -53,14 +39,13 @@ jobs:
           cargo binstall -y greentic-flow --force
           cargo binstall -y greentic-pack --force
           cargo binstall -y greentic-integration-tester --force
-      - run: cargo test --workspace --all-features
       - name: Run gtests
         run: greentic-integration-tester run --gtest tests/gtests/smoke --artifacts-dir artifacts/gtests --workdir .
         continue-on-error: true
 
   test-translate-integration:
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [ci]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -81,7 +66,7 @@ jobs:
 
   build_release:
     if: github.event_name == 'push'
-    needs: [fmt, clippy, test]
+    needs: [ci]
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -160,6 +145,8 @@ jobs:
     if: github.event_name == 'push'
     needs: [build_release]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
