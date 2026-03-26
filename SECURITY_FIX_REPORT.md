@@ -20,8 +20,9 @@ Role: CI Security Reviewer
    - `Cargo.lock`
    - `component-prompt2flow/Cargo.toml`
 3. Checked recent PR commit scope (`HEAD~1..HEAD`) for dependency-file changes:
-   - Changed file: `src/translate.rs`
-   - No dependency files changed in the latest PR commit.
+   - Changed files: `CLAUDE.md`, `Cargo.toml`, `SECURITY_FIX_REPORT.md`, `pr-comment.md`, `src/translate.rs`
+   - Dependency-file change observed: package metadata version bump in `Cargo.toml` (`0.4.14` -> `0.4.15`)
+   - No dependency crate additions, removals, or version-constraint changes were introduced.
 4. Attempted local Rust advisory scan:
    - Command: `cargo audit -q`
    - Result: unavailable in this CI image (`cargo-audit` not installed).
@@ -30,7 +31,7 @@ Role: CI Security Reviewer
 - No Dependabot alerts were provided.
 - No code scanning alerts were provided.
 - No PR dependency vulnerabilities were provided.
-- No new dependency-file vulnerabilities were introduced by current PR changes.
+- No new dependency vulnerabilities were introduced by current PR dependency changes.
 
 ## Fixes Applied
 - None required (no vulnerabilities identified from provided alerts or dependency diff review).
