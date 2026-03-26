@@ -576,7 +576,10 @@ resolve_translator_bin() {
 }
 
 load_locales() {
-  mapfile -t LOCALES < <(python3 - <<'PY' "$LOCALES_FILE"
+  LOCALES=()
+  while IFS= read -r line; do
+    LOCALES+=("$line")
+  done < <(python3 - <<'PY' "$LOCALES_FILE"
 import json, sys
 for item in json.load(open(sys.argv[1], encoding="utf-8")):
     print(item)

@@ -195,15 +195,11 @@ fn write_i18n_manifest(i18n_dir: &Path, translated_languages: &[String]) {
     match serde_json::to_string_pretty(&locales) {
         Ok(json) => {
             if let Err(err) = std::fs::write(&manifest_path, json) {
-                eprintln!(
-                    "[translate] warning: failed to write i18n manifest: {err}"
-                );
+                eprintln!("[translate] warning: failed to write i18n manifest: {err}");
             }
         }
         Err(err) => {
-            eprintln!(
-                "[translate] warning: failed to serialize i18n manifest: {err}"
-            );
+            eprintln!("[translate] warning: failed to serialize i18n manifest: {err}");
         }
     }
 }
