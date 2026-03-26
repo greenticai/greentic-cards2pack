@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 use serde_json::json;
@@ -18,13 +19,15 @@ pub fn emit_flow(
     graph: &FlowGraph,
     workspace_root: &Path,
     strict: bool,
+    custom_langs: Option<&[String]>,
 ) -> Result<(PathBuf, Vec<Warning>)> {
     let flows_dir = workspace_root.join("flows");
     fs::create_dir_all(&flows_dir)
         .with_context(|| format!("failed to create {}", flows_dir.display()))?;
 
     let path = flows_dir.join("main.ygtc");
-    let (generated, warnings) = generate_flow_with_cli(graph, workspace_root, strict)?;
+    let (generated, warnings) =
+        generate_flow_with_cli(graph, workspace_root, strict, custom_langs)?;
     let block = format!("{BEGIN_MARKER}\n{generated}\n{END_MARKER}\n");
 
     let next_contents = if path.exists() {
@@ -57,6 +60,7 @@ fn generate_flow_with_cli(
     graph: &FlowGraph,
     workspace_root: &Path,
     strict: bool,
+    custom_langs: Option<&[String]>,
 ) -> Result<(String, Vec<Warning>)> {
     let tmp_dir = workspace_root.join(".cards2pack").join("tmp");
     fs::create_dir_all(&tmp_dir)
@@ -76,12 +80,18 @@ fn generate_flow_with_cli(
 
     let mut warnings = Vec::new();
     let order = resolve_node_order(graph);
+    let total_nodes = order.len();
     let mut created: BTreeSet<String> = BTreeSet::new();
 
-    for node_id in order {
+    eprintln!(
+        "[flow] Adding {total_nodes} nodes to flow '{}'...",
+        graph.flow_name
+    );
+
+    for (idx, node_id) in order.iter().enumerate() {
         let node = graph
             .nodes
-            .get(&node_id)
+            .get(node_id)
             .ok_or_else(|| anyhow::anyhow!("missing node {node_id}"))?;
 
         let (routes, skipped) = resolve_routes(node, &created);
@@ -114,7 +124,7 @@ fn generate_flow_with_cli(
             "TODO".to_string()
         };
         let needs_interaction = !node.routes.is_empty();
-        let payload = build_card_payload(&node_id, &card_path_value, needs_interaction);
+        let payload = build_card_payload(node_id, &card_path_value, needs_interaction);
 
         let mut args = vec![
             "add-step".to_string(),
@@ -131,11 +141,23 @@ fn generate_flow_with_cli(
             "--allow-cycles".to_string(),
         ];
 
-        push_routing_flags(&mut args, &node_id, &routes, &mut warnings);
+        push_routing_flags(&mut args, node_id, &routes, &mut warnings);
 
-        run_greentic_flow_strings(&args)?;
-        created.insert(node_id);
+        // Auto-answer the component wizard questions:
+        // 1. default_source → "2" (asset)
+        // 2. default_card_asset → card asset path
+        // 3. multilingual → "" (accept default: true)
+        // 4. language_mode → "1" (all) or "2" (custom) + langs
+        let wizard_answers = match custom_langs {
+            Some(langs) => format!("2\n{card_path_value}\n\n2\n{}\n", langs.join(",")),
+            None => format!("2\n{card_path_value}\n\n1\n"),
+        };
+        run_greentic_flow_with_stdin(&args, &wizard_answers)?;
+        eprint!("\r[flow] Progress: {}/{total_nodes}", idx + 1);
+        let _ = std::io::stderr().flush();
+        created.insert(node_id.clone());
     }
+    eprintln!();
 
     let contents = fs::read_to_string(&tmp_flow)
         .with_context(|| format!("failed to read {}", tmp_flow.display()))?;
@@ -275,28 +297,45 @@ fn push_routing_flags(
 }
 
 fn run_greentic_flow(args: &[&str]) -> Result<()> {
-    let status = Command::new("greentic-flow")
+    let output = Command::new("greentic-flow")
         .args(args)
-        .status()
+        .stdin(std::process::Stdio::null())
+        .output()
         .with_context(|| format!("failed to run greentic-flow {}", args.join(" ")))?;
-    if !status.success() {
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         bail!(
-            "greentic-flow command failed: greentic-flow {}",
-            args.join(" ")
+            "greentic-flow command failed: greentic-flow {}\n{}",
+            args.join(" "),
+            stderr.trim_end()
         );
     }
     Ok(())
 }
 
-fn run_greentic_flow_strings(args: &[String]) -> Result<()> {
-    let status = Command::new("greentic-flow")
+fn run_greentic_flow_with_stdin(args: &[String], stdin_data: &str) -> Result<()> {
+    let mut child = Command::new("greentic-flow")
         .args(args)
-        .status()
-        .with_context(|| format!("failed to run greentic-flow {}", args.join(" ")))?;
-    if !status.success() {
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn greentic-flow {}", args.join(" ")))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(stdin_data.as_bytes());
+    }
+
+    let output = child
+        .wait_with_output()
+        .with_context(|| format!("failed to wait for greentic-flow {}", args.join(" ")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         bail!(
-            "greentic-flow command failed: greentic-flow {}",
-            args.join(" ")
+            "greentic-flow command failed: greentic-flow {}\n{}",
+            args.join(" "),
+            stderr.trim_end()
         );
     }
     Ok(())

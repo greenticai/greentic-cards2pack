@@ -46,7 +46,7 @@ fn emits_flow_with_routes() {
 
     let flow = scan_flow(tmp.path());
     let graph = build_flow_graph(&flow, true).unwrap();
-    let flow_path = emit_flow(&graph, tmp.path(), true).unwrap().0;
+    let flow_path = emit_flow(&graph, tmp.path(), true, None).unwrap().0;
     let contents = fs::read_to_string(flow_path).unwrap();
     let generated = extract_generated_block(&contents);
 
@@ -73,7 +73,7 @@ fn preserves_developer_content_between_runs() {
 
     let flow = scan_flow(tmp.path());
     let graph = build_flow_graph(&flow, true).unwrap();
-    let flow_path = emit_flow(&graph, tmp.path(), true).unwrap().0;
+    let flow_path = emit_flow(&graph, tmp.path(), true, None).unwrap().0;
 
     let mut contents = fs::read_to_string(&flow_path).unwrap();
     contents.push_str("\n# Developer note\n");
@@ -81,7 +81,7 @@ fn preserves_developer_content_between_runs() {
 
     let flow = scan_flow(tmp.path());
     let graph = build_flow_graph(&flow, true).unwrap();
-    let flow_path = emit_flow(&graph, tmp.path(), true).unwrap().0;
+    let flow_path = emit_flow(&graph, tmp.path(), true, None).unwrap().0;
     let updated = fs::read_to_string(flow_path).unwrap();
 
     assert!(updated.contains("# Developer note"));
