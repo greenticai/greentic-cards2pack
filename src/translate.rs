@@ -168,12 +168,40 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
         }
     }
 
+    // Write _manifest.json listing all successfully translated locales.
+    // Frontends use this to show only languages with actual translations
+    // in language selectors.
+    write_i18n_manifest(&config.i18n_output_dir, &languages_translated);
+
     Ok(TranslateResult {
         strings_extracted: strings.len(),
         languages_translated,
         languages_failed,
         en_bundle_path,
     })
+}
+
+/// Write `_manifest.json` to the i18n output directory, listing all locale
+/// codes that have translation files (including "en").
+fn write_i18n_manifest(i18n_dir: &Path, translated_languages: &[String]) {
+    let mut locales: Vec<&str> = vec!["en"];
+    for lang in translated_languages {
+        locales.push(lang.as_str());
+    }
+    locales.sort();
+    locales.dedup();
+
+    let manifest_path = i18n_dir.join("_manifest.json");
+    match serde_json::to_string_pretty(&locales) {
+        Ok(json) => {
+            if let Err(err) = std::fs::write(&manifest_path, json) {
+                eprintln!("[translate] warning: failed to write i18n manifest: {err}");
+            }
+        }
+        Err(err) => {
+            eprintln!("[translate] warning: failed to serialize i18n manifest: {err}");
+        }
+    }
 }
 
 fn resolve_translator_bin() -> String {
