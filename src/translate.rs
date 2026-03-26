@@ -161,9 +161,8 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
             }
             Err(err) => {
                 let error_msg = format!("{err:#}");
-                if config.verbose {
-                    eprintln!("[translate] Failed to translate to {lang}: {error_msg}");
-                }
+                // Always print failures — silent failures are confusing.
+                eprintln!("[translate] Failed to translate to {lang}: {error_msg}");
                 languages_failed.push((lang, error_msg));
             }
         }
@@ -188,7 +187,12 @@ fn resolve_translator_bin() -> String {
 ///
 /// Each invocation runs in its own temporary working directory to avoid
 /// race conditions on the shared `.i18n/translator-state.json` file
-/// when multiple translations run in parallel.
+/// when multiple translations run in parallel.  The work directory is
+/// initialised as a bare git repository so that tools that require a
+/// trusted git context (e.g. `codex exec`) don't reject the directory.
+///
+/// The translator writes output next to the `--en` file, so the
+/// translated bundle lands directly in `i18n_output_dir`.
 fn translate_to_language(config: &TranslateConfig, lang: &str, en_bundle: &Path) -> Result<()> {
     let bin = resolve_translator_bin();
 
@@ -198,17 +202,36 @@ fn translate_to_language(config: &TranslateConfig, lang: &str, en_bundle: &Path)
     std::fs::create_dir_all(&work_dir)
         .with_context(|| format!("failed to create translator work dir for {lang}"))?;
 
+    // Initialise a git repo in the work dir so codex-cli considers it a
+    // trusted directory.  Ignore errors — if git isn't available the
+    // translator may still work with --auth-mode api-key.
+    if !work_dir.join(".git").exists() {
+        let _ = Command::new("git")
+            .arg("init")
+            .arg("--quiet")
+            .current_dir(&work_dir)
+            .output();
+    }
+
+    // The translator writes {lang}.json next to the --en file, so we
+    // pass the absolute path to en_bundle.  This ensures the output
+    // lands in config.i18n_output_dir regardless of the working dir.
+    let en_bundle_abs = std::fs::canonicalize(en_bundle)
+        .unwrap_or_else(|_| en_bundle.to_path_buf());
+
     let mut cmd = Command::new(&bin);
     cmd.current_dir(&work_dir)
         .arg("translate")
         .arg("--langs")
         .arg(lang)
         .arg("--en")
-        .arg(en_bundle);
+        .arg(&en_bundle_abs);
 
     // Add glossary if provided
     if let Some(glossary) = &config.glossary {
-        cmd.arg("--glossary").arg(glossary);
+        let glossary_abs = std::fs::canonicalize(glossary)
+            .unwrap_or_else(|_| glossary.clone());
+        cmd.arg("--glossary").arg(glossary_abs);
     }
 
     // Add auth mode (default to auto, which tries codex-cli first)
