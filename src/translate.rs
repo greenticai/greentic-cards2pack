@@ -8,8 +8,10 @@
 //! Translation failures are non-fatal — the generate command will succeed
 //! with a warning if translation fails.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
 
@@ -56,16 +58,64 @@ pub struct TranslateResult {
     pub en_bundle_path: PathBuf,
 }
 
+/// Ensure the translator binary is available, installing via `cargo binstall` if needed.
+fn ensure_translator_available(verbose: bool) -> Result<()> {
+    let bin = resolve_translator_bin();
+
+    // If a custom binary path was set via env var, don't try to auto-install.
+    if std::env::var(TRANSLATOR_BIN_ENV)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .is_some()
+    {
+        return Ok(());
+    }
+
+    if which::which(&bin).is_ok() {
+        return Ok(());
+    }
+
+    eprintln!("[translate] greentic-i18n-translator not found, installing via cargo binstall...");
+
+    let mut cmd = Command::new("cargo");
+    cmd.arg("binstall")
+        .arg("greentic-i18n-translator")
+        .arg("--no-confirm");
+
+    if verbose {
+        eprintln!("[translate] Running: {:?}", cmd);
+    }
+
+    let output = cmd.output().context(
+        "failed to run cargo binstall — is cargo-binstall installed? \
+         Install it with: cargo install cargo-binstall",
+    )?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "cargo binstall greentic-i18n-translator failed:\n{}",
+            stderr.trim_end()
+        );
+    }
+
+    eprintln!("[translate] greentic-i18n-translator installed successfully");
+    Ok(())
+}
+
 /// Run the auto-translation pipeline.
 ///
 /// This function:
-/// 1. Extracts translatable strings from cards
-/// 2. Writes the English bundle to `{i18n_output_dir}/en.json`
-/// 3. Invokes greentic-i18n-translator for each target language
+/// 1. Ensures greentic-i18n-translator is installed (auto-installs if missing)
+/// 2. Extracts translatable strings from cards
+/// 3. Writes the English bundle to `{i18n_output_dir}/en.json`
+/// 4. Invokes greentic-i18n-translator for each target language
 ///
 /// Translation failures are captured but do not cause the function to fail.
 /// The caller should check `TranslateResult::languages_failed` for any issues.
 pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
+    // Auto-install translator if not available
+    ensure_translator_available(config.verbose)?;
     // Ensure output directory exists
     std::fs::create_dir_all(&config.i18n_output_dir).with_context(|| {
         format!(
@@ -87,9 +137,7 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
         .context("failed to extract i18n strings from cards")?;
 
     if strings.is_empty() {
-        if config.verbose {
-            eprintln!("[translate] No translatable strings found in cards");
-        }
+        eprintln!("[translate] No translatable strings found in cards");
         return Ok(TranslateResult {
             strings_extracted: 0,
             languages_translated: Vec::new(),
@@ -102,13 +150,11 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
     i18n_extract::write_bundle(&strings, &en_bundle_path)
         .context("failed to write English i18n bundle")?;
 
-    if config.verbose {
-        eprintln!(
-            "[translate] Extracted {} strings to {}",
-            strings.len(),
-            en_bundle_path.display()
-        );
-    }
+    eprintln!(
+        "[translate] Extracted {} strings to {}",
+        strings.len(),
+        en_bundle_path.display()
+    );
 
     // Step 2: Translate to each target language (parallel, max 8 concurrent)
     let languages: Vec<String> = if config.languages.is_empty() {
@@ -117,29 +163,38 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
         config.languages.clone()
     };
 
-    const MAX_CONCURRENT: usize = 8;
+    let max_concurrent: usize = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    let total = languages.len();
+    let done = AtomicUsize::new(0);
 
     let mut languages_translated = Vec::new();
     let mut languages_failed = Vec::new();
 
-    if config.verbose {
-        eprintln!(
-            "[translate] Translating to {} languages ({} concurrent)",
-            languages.len(),
-            MAX_CONCURRENT
-        );
-    }
+    eprintln!("[translate] Translating to {total} languages...");
 
+    let num_chunks = total.div_ceil(max_concurrent);
     let results: Vec<(String, Result<()>)> = std::thread::scope(|scope| {
         let mut all_results = Vec::new();
-        for chunk in languages.chunks(MAX_CONCURRENT) {
+        for (chunk_idx, chunk) in languages.chunks(max_concurrent).enumerate() {
+            let batch: Vec<_> = chunk.iter().map(|l| l.as_str()).collect();
+            eprintln!(
+                "[translate] Batch {}/{num_chunks}: {}",
+                chunk_idx + 1,
+                batch.join(", ")
+            );
             let handles: Vec<_> = chunk
                 .iter()
                 .map(|lang| {
                     let lang = lang.clone();
                     let en_path = en_bundle_path.clone();
+                    let done = &done;
                     scope.spawn(move || {
                         let result = translate_to_language(config, &lang, &en_path);
+                        let completed = done.fetch_add(1, Ordering::Relaxed) + 1;
+                        eprint!("\r[translate] Progress: {completed}/{total}  ");
+                        let _ = std::io::stderr().flush();
                         (lang, result)
                     })
                 })
@@ -147,6 +202,7 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
             for handle in handles {
                 all_results.push(handle.join().unwrap());
             }
+            eprintln!();
         }
         all_results
     });
@@ -167,6 +223,12 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
             }
         }
     }
+
+    eprintln!(
+        "[translate] Done: {} succeeded, {} failed",
+        languages_translated.len(),
+        languages_failed.len()
+    );
 
     // Write _manifest.json listing all successfully translated locales.
     // Frontends use this to show only languages with actual translations
