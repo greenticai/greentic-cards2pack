@@ -170,7 +170,8 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
         if !graph.warnings.is_empty() {
             manifest.warnings.extend(graph.warnings.iter().cloned());
         }
-        let (path, flow_warnings) = emit_flow(&graph, &args.out, args.strict)?;
+        let (path, flow_warnings) =
+            emit_flow(&graph, &args.out, args.strict, args.langs.as_deref())?;
         if !flow_warnings.is_empty() {
             manifest.warnings.extend(flow_warnings);
         }
