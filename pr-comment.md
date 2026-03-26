@@ -1,7 +1,7 @@
 <h1>Dependency Review</h1>
 The following issues were found:<ul><li>✅ 0 vulnerable package(s)</li><li>✅ 0 package(s) with incompatible licenses</li><li>✅ 0 package(s) with invalid SPDX license definitions</li><li>⚠️ 1 package(s) with unknown licenses.</li></ul>
 See the Details below.<h2>Snapshot Warnings</h2>
-<blockquote>⚠️: No snapshots were found for the head SHA df7b0004ab12f2e9bc6f4f381237079b8b19eee2.</blockquote>
+<blockquote>⚠️: No snapshots were found for the head SHA b11cc5d9c30f9311cb32f7c191a2c71977efd999.</blockquote>
 Ensure that dependencies are being submitted on PR branches and consider enabling <em>retry-on-snapshot-warnings</em>. See <a href="https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review#best-practices-for-using-the-dependency-review-api-and-the-dependency-submission-api-together">the documentation</a> for more information and troubleshooting advice.<h2>License Issues</h2>
 <h4><em>.github/workflows/ci.yml</em></h4>
 <table><tr><td>Package</td><td>Version</td><td>License</td><td>Issue Type</td></tr><tr><td><a href="https://github.com/greenticai/.github">greenticai/.github/.github/workflows/host-crate-ci.yml</a></td><td>main</td><td>Null</td><td>Unknown License</td></tr></table>
