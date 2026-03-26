@@ -1,40 +1,32 @@
 # Security Fix Report
 
-Date (UTC): 2026-03-26
-Repository: `/home/runner/work/greentic-cards2pack/greentic-cards2pack`
+Date: 2026-03-26 (UTC)
+Reviewer: CI Security Reviewer
 
 ## Inputs Reviewed
-- Security alerts JSON:
-  - `dependabot`: `[]`
-  - `code_scanning`: `[]`
-- New PR Dependency Vulnerabilities: `[]`
+- Dependabot alerts: `0`
+- Code scanning alerts: `0`
+- New PR dependency vulnerabilities: `0`
 
-## Checks Performed
-1. Verified security input files:
-   - `security-alerts.json`
-   - `dependabot-alerts.json`
-   - `code-scanning-alerts.json`
-   - `pr-vulnerable-changes.json`
-2. Reviewed dependency manifests/lockfiles present in repo:
-   - `Cargo.toml`
-   - `Cargo.lock`
-   - `component-prompt2flow/Cargo.toml`
-3. Checked PR/worktree file changes:
-   - `git diff --name-only` reports only `pr-comment.md`
-   - No dependency manifest/lockfile changes in this PR.
-4. Attempted local advisory scan:
-   - `cargo audit` unavailable in CI (`no such command: audit`).
+## PR Dependency File Review
+Dependency manifests detected in repository:
+- `Cargo.toml`
+- `Cargo.lock`
+- `component-prompt2flow/Cargo.toml`
 
-## Findings
-- No Dependabot alerts to remediate.
-- No code scanning alerts to remediate.
-- No new PR dependency vulnerabilities reported.
-- No newly introduced dependency risks found from PR file changes.
+Checks performed:
+- Reviewed working-tree PR diff for dependency files:
+  - `git diff --name-only -- Cargo.toml Cargo.lock component-prompt2flow/Cargo.toml`
+  - Result: no dependency-file changes detected in current PR workspace.
+- Attempted local Rust vulnerability audit:
+  - Command: `cargo audit -q`
+  - Result: `cargo-audit` not installed in CI image.
 
 ## Remediation Actions
-- No source or dependency modifications were required.
-- No security patches were applied because no actionable vulnerabilities were identified.
+- No vulnerabilities were reported by provided security inputs.
+- No new PR dependency vulnerabilities were provided.
+- No dependency-file changes requiring remediation were detected.
+- No code or dependency modifications were necessary.
 
-## Residual Risk / Notes
-- Advisory DB scanning with `cargo-audit` could not be run in this environment due to missing tool installation.
-- Based on provided alert data and PR diff scope, residual risk is low.
+## Outcome
+No security fixes were required or applied for this PR based on the provided alerts and dependency-vulnerability inputs.
