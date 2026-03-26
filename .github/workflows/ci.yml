@@ -12,6 +12,9 @@ permissions:
 jobs:
   ci:
     uses: greenticai/.github/.github/workflows/host-crate-ci.yml@main
+    with:
+      rust-version: "stable"
+      setup-script: "if ! command -v cargo-binstall >/dev/null 2>&1; then cargo install cargo-binstall --locked; fi && cargo binstall -y greentic-flow --force"
 
   gtests:
     runs-on: ubuntu-latest
