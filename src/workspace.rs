@@ -37,7 +37,7 @@ const PACK_I18N_LOCALES: &[&str] = &[
     "my", "nah", "ne", "nl", "no", "pa", "pl", "pt", "qu", "ro", "ru", "si", "sk", "sr", "sv",
     "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "zh",
 ];
-const CARD_I18N_PREFIX: &str = "cards";
+const CARD_I18N_PREFIX: &str = "card";
 
 pub fn generate(args: &GenerateArgs) -> Result<()> {
     if !args.cards.is_dir() {
@@ -360,11 +360,12 @@ fn rewrite_cards_with_i18n_markers(
             .strip_prefix(cards_root)
             .with_context(|| format!("failed to strip prefix for {}", path.display()))?;
         let card_prefix = card_key_prefix(rel);
-        let mut key_path = vec![CARD_I18N_PREFIX.to_string()];
-        key_path.extend(card_prefix);
+        let mut prefix_parts = vec![CARD_I18N_PREFIX.to_string()];
+        prefix_parts.extend(card_prefix);
+        let prefix = prefix_parts.join(".");
 
         let mut changed = false;
-        rewrite_value_for_i18n(&mut value, &mut key_path, extracted, &mut changed);
+        rewrite_value_for_i18n(&mut value, &prefix, "", extracted, &mut changed);
         if changed {
             let encoded = serde_json::to_string_pretty(&value).context("encode adaptive card")?;
             fs::write(path, format!("{encoded}\n"))
@@ -392,17 +393,22 @@ fn card_key_prefix(rel_path: &Path) -> Vec<String> {
 
 fn rewrite_value_for_i18n(
     value: &mut serde_json::Value,
-    key_path: &mut Vec<String>,
+    prefix: &str,
+    path: &str,
     extracted: &mut BTreeMap<String, String>,
     changed: &mut bool,
 ) {
     match value {
         serde_json::Value::Object(map) => {
             for (key, child) in map {
-                key_path.push(sanitize_key_segment(key));
                 if should_localize_field(key, child) {
                     if let serde_json::Value::String(text) = child {
-                        let i18n_key = key_path.join(".");
+                        let field = sanitize_key_segment(key);
+                        let i18n_key = if path.is_empty() {
+                            format!("{prefix}.{field}")
+                        } else {
+                            format!("{prefix}.{path}.{field}")
+                        };
                         let original = text.clone();
                         extracted.insert(i18n_key.clone(), original);
                         let marker = format!("{{{{i18n:{i18n_key}}}}}");
@@ -412,16 +418,19 @@ fn rewrite_value_for_i18n(
                         }
                     }
                 } else {
-                    rewrite_value_for_i18n(child, key_path, extracted, changed);
+                    let child_path = if path.is_empty() {
+                        sanitize_key_segment(key)
+                    } else {
+                        format!("{}_{}", path, sanitize_key_segment(key))
+                    };
+                    rewrite_value_for_i18n(child, prefix, &child_path, extracted, changed);
                 }
-                key_path.pop();
             }
         }
         serde_json::Value::Array(items) => {
             for (idx, item) in items.iter_mut().enumerate() {
-                key_path.push(format!("i{idx}"));
-                rewrite_value_for_i18n(item, key_path, extracted, changed);
-                key_path.pop();
+                let item_path = format!("{}_{}", path, idx);
+                rewrite_value_for_i18n(item, prefix, &item_path, extracted, changed);
             }
         }
         _ => {}
