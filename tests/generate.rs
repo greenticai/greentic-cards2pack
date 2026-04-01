@@ -331,20 +331,20 @@ fn generate_scaffolds_pack_i18n_and_rewrites_card_text() {
 
     let rewritten_card =
         fs::read_to_string(out_dir.join("assets/cards/cards/welcome.json")).unwrap();
-    assert!(rewritten_card.contains("{{i18n:cards.cards.welcome.body.i0.text}}"));
-    assert!(rewritten_card.contains("{{i18n:cards.cards.welcome.body.i1.placeholder}}"));
-    assert!(rewritten_card.contains("{{i18n:cards.cards.welcome.actions.i0.title}}"));
+    assert!(rewritten_card.contains("{{i18n:card.cards.welcome.body_0.text}}"));
+    assert!(rewritten_card.contains("{{i18n:card.cards.welcome.body_1.placeholder}}"));
+    assert!(rewritten_card.contains("{{i18n:card.cards.welcome.actions_0.title}}"));
 
     let en: Value =
         serde_json::from_str(&fs::read_to_string(out_dir.join("assets/i18n/en.json")).unwrap())
             .unwrap();
     assert_eq!(
-        en.get("cards.cards.welcome.body.i0.text")
+        en.get("card.cards.welcome.body_0.text")
             .and_then(Value::as_str),
         Some("Welcome")
     );
     assert_eq!(
-        en.get("cards.cards.welcome.actions.i0.title")
+        en.get("card.cards.welcome.actions_0.title")
             .and_then(Value::as_str),
         Some("Continue")
     );
