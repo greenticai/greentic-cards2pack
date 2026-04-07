@@ -85,14 +85,27 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
     let mut translation_warnings = Vec::new();
     if args.auto_translate {
         let i18n_output_dir = args.out.join("assets").join("i18n");
+        // Detect source i18n bundle to merge (sibling i18n/en.json next to --cards dir).
+        let mut merge_sources = Vec::new();
+        if let Some(parent) = args.cards.parent() {
+            let source_en = parent.join("i18n").join("en.json");
+            if source_en.exists() {
+                merge_sources.push(source_en);
+            }
+        }
+
         let translate_config = TranslateConfig {
             cards_dir: args.cards.clone(),
-            i18n_output_dir,
+            i18n_output_dir: i18n_output_dir.clone(),
             languages: args.langs.clone().unwrap_or_default(),
             glossary: args.glossary.clone(),
             verbose: args.verbose,
+            merge_en_sources: merge_sources,
         };
 
+        // Extract strings first (writes en.json with extracted strings only).
+        // Then merge existing {{i18n:KEY}} entries from source i18n bundle so
+        // the translator sees the full set of strings.
         match run_auto_translate(&translate_config) {
             Ok(result) => {
                 if args.verbose {
@@ -205,7 +218,16 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
     }
 
     sync_local_component_if_configured(&args.out, &greentic_pack_bin, &mut manifest, args.strict)?;
-    run_greentic_pack_update(&greentic_pack_bin, &args.out)?;
+    if let Err(err) = run_greentic_pack_update(&greentic_pack_bin, &args.out) {
+        if args.strict {
+            return Err(err);
+        }
+        manifest.warnings.push(warning(
+            WarningKind::Validation,
+            format!("greentic-pack update failed: {err}"),
+        ));
+    }
+    populate_pack_yaml_assets(&args.out)?;
     update_readme(&args.out, &args.name, &readme_entries)?;
 
     if let Err(err) = run_greentic_flow_doctor(&args.out.join("flows")) {
@@ -303,6 +325,62 @@ pub fn generate(args: &GenerateArgs) -> Result<()> {
     write_manifest(&state_dir, &manifest)?;
 
     println!("{}", summarize(&manifest.diagnostics, &manifest.warnings));
+
+    Ok(())
+}
+
+fn populate_pack_yaml_assets(workspace_root: &Path) -> Result<()> {
+    let pack_yaml_path = workspace_root.join("pack.yaml");
+    if !pack_yaml_path.exists() {
+        return Ok(());
+    }
+
+    let raw = fs::read_to_string(&pack_yaml_path)
+        .with_context(|| format!("failed to read {}", pack_yaml_path.display()))?;
+    let mut doc: YamlValue =
+        serde_yaml_bw::from_str(&raw).with_context(|| "failed to parse pack.yaml")?;
+
+    let assets_dir = workspace_root.join("assets");
+    if !assets_dir.is_dir() {
+        return Ok(());
+    }
+
+    let mut asset_entries: Vec<YamlValue> = Vec::new();
+    for entry in WalkDir::new(&assets_dir)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let rel = entry
+            .path()
+            .strip_prefix(workspace_root)
+            .unwrap_or(entry.path());
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        let mut map = serde_yaml_bw::Mapping::new();
+        map.insert(
+            YamlValue::String("path".to_string(), None),
+            YamlValue::String(rel_str, None),
+        );
+        asset_entries.push(YamlValue::Mapping(map));
+    }
+
+    if let YamlValue::Mapping(ref mut root) = doc {
+        root.insert(
+            YamlValue::String("assets".to_string(), None),
+            YamlValue::Sequence(serde_yaml_bw::Sequence {
+                anchor: None,
+                elements: asset_entries,
+            }),
+        );
+    }
+
+    let encoded =
+        serde_yaml_bw::to_string(&doc).with_context(|| "failed to serialize pack.yaml")?;
+    fs::write(&pack_yaml_path, encoded)
+        .with_context(|| format!("failed to write {}", pack_yaml_path.display()))?;
 
     Ok(())
 }
@@ -917,7 +995,7 @@ fn sync_local_component_if_configured(
     {
         manifest_json["version"] = serde_json::Value::String(version);
     }
-    let wasm_name = manifest_json
+    let wasm_name_raw = manifest_json
         .pointer("/artifacts/component_wasm")
         .and_then(|value| value.as_str())
         .unwrap_or_else(|| {
@@ -926,6 +1004,11 @@ fn sync_local_component_if_configured(
                 .and_then(|name| name.to_str())
                 .unwrap_or("component_adaptive_card.wasm")
         });
+    // Use only the filename, not a relative path.
+    let wasm_name = Path::new(wasm_name_raw)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(wasm_name_raw);
 
     let components_dir = pack_root.join("components").join("component-adaptive-card");
     fs::create_dir_all(&components_dir)

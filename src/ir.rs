@@ -18,6 +18,7 @@ pub struct CardDoc {
 pub struct CardAction {
     pub action_type: String,
     pub title: Option<String>,
+    pub action_id: Option<String>,
     pub target: Option<RouteTarget>,
     pub data: Value,
 }

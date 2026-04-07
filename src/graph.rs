@@ -24,6 +24,7 @@ pub struct FlowNode {
 pub struct RouteEdge {
     pub key: String,
     pub target: String,
+    pub action_id: Option<String>,
 }
 
 pub fn build_flow_graph(group: &FlowGroup, strict: bool) -> Result<FlowGraph> {
@@ -46,14 +47,12 @@ pub fn build_flow_graph(group: &FlowGroup, strict: bool) -> Result<FlowGraph> {
         let mut routes = Vec::new();
 
         for (index, action) in card.actions.iter().enumerate() {
-            let target = match &action.target {
-                Some(target) => target,
+            let target_name = match &action.target {
+                Some(RouteTarget::Step(name)) => name.clone(),
+                Some(RouteTarget::CardId(name)) => name.clone(),
+                // Actions with action_id but no explicit target route back to self.
+                None if action.action_id.is_some() => card.card_id.clone(),
                 None => continue,
-            };
-
-            let target_name = match target {
-                RouteTarget::Step(name) => name.clone(),
-                RouteTarget::CardId(name) => name.clone(),
             };
 
             if !nodes.contains_key(&target_name) {
@@ -83,7 +82,15 @@ pub fn build_flow_graph(group: &FlowGroup, strict: bool) -> Result<FlowGraph> {
                 );
             }
 
-            let mut key = route_key_for_action(action, target, index);
+            let mut key = if !target_name.is_empty() {
+                target_name.clone()
+            } else if let Some(title) = action.title.as_ref()
+                && !title.is_empty()
+            {
+                title.clone()
+            } else {
+                format!("action-{}", index + 1)
+            };
             if used_keys.contains(&key) {
                 let mut suffix = 2;
                 while used_keys.contains(&format!("{}-{}", key, suffix)) {
@@ -104,6 +111,7 @@ pub fn build_flow_graph(group: &FlowGroup, strict: bool) -> Result<FlowGraph> {
             routes.push(RouteEdge {
                 key,
                 target: target_name,
+                action_id: action.action_id.clone(),
             });
         }
 
@@ -117,27 +125,4 @@ pub fn build_flow_graph(group: &FlowGroup, strict: bool) -> Result<FlowGraph> {
         nodes,
         warnings,
     })
-}
-
-fn route_key_for_action(
-    action: &crate::ir::CardAction,
-    target: &RouteTarget,
-    index: usize,
-) -> String {
-    let base = match target {
-        RouteTarget::Step(value) => value.clone(),
-        RouteTarget::CardId(value) => value.clone(),
-    };
-
-    if !base.is_empty() {
-        return base;
-    }
-
-    if let Some(title) = action.title.as_ref()
-        && !title.is_empty()
-    {
-        return title.clone();
-    }
-
-    format!("action-{}", index + 1)
 }

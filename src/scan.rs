@@ -143,14 +143,24 @@ pub fn scan_cards(config: &ScanConfig) -> Result<Manifest> {
                 action_flow_names.push(flow.to_string());
             }
 
+            let action_id = data_obj
+                .and_then(|obj| obj.get("action_id"))
+                .and_then(|value| value.as_str())
+                .map(|s| s.to_string());
+
             let target = if let Some(step) = data_obj
                 .and_then(|obj| obj.get("step"))
                 .and_then(|value| value.as_str())
             {
                 Some(RouteTarget::Step(step.to_string()))
+            } else if let Some(card_id) = data_obj
+                .and_then(|obj| obj.get("cardId"))
+                .and_then(|value| value.as_str())
+            {
+                Some(RouteTarget::CardId(card_id.to_string()))
             } else {
                 data_obj
-                    .and_then(|obj| obj.get("cardId"))
+                    .and_then(|obj| obj.get("routeToCardId"))
                     .and_then(|value| value.as_str())
                     .map(|card_id| RouteTarget::CardId(card_id.to_string()))
             };
@@ -158,6 +168,7 @@ pub fn scan_cards(config: &ScanConfig) -> Result<Manifest> {
             actions.push(CardAction {
                 action_type,
                 title,
+                action_id,
                 target,
                 data,
             });
