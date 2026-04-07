@@ -43,6 +43,9 @@ pub struct TranslateConfig {
     pub glossary: Option<PathBuf>,
     /// Enable verbose output.
     pub verbose: bool,
+    /// Optional extra en.json sources to merge before translating.
+    /// Keys from these files are added to en.json after extraction.
+    pub merge_en_sources: Vec<PathBuf>,
 }
 
 /// Result of the translation step.
@@ -150,9 +153,33 @@ pub fn run_auto_translate(config: &TranslateConfig) -> Result<TranslateResult> {
     i18n_extract::write_bundle(&strings, &en_bundle_path)
         .context("failed to write English i18n bundle")?;
 
+    // Merge additional en.json sources (e.g., existing i18n bundles from source cards).
+    let mut merged_count = strings.len();
+    for source in &config.merge_en_sources {
+        if source.exists()
+            && let Ok(raw) = std::fs::read_to_string(source)
+            && let Ok(extra) =
+                serde_json::from_str::<std::collections::BTreeMap<String, String>>(&raw)
+        {
+            // Read current en.json, merge, re-write.
+            let mut current: std::collections::BTreeMap<String, String> =
+                std::fs::read_to_string(&en_bundle_path)
+                    .ok()
+                    .and_then(|r| serde_json::from_str(&r).ok())
+                    .unwrap_or_default();
+            for (k, v) in extra {
+                current.entry(k).or_insert(v);
+            }
+            merged_count = current.len();
+            let encoded =
+                serde_json::to_string_pretty(&current).unwrap_or_else(|_| "{}".to_string());
+            let _ = std::fs::write(&en_bundle_path, format!("{encoded}\n"));
+        }
+    }
+
     eprintln!(
         "[translate] Extracted {} strings to {}",
-        strings.len(),
+        merged_count,
         en_bundle_path.display()
     );
 

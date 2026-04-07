@@ -79,9 +79,14 @@ fn generate_flow_with_cli(
     ])?;
 
     let mut warnings = Vec::new();
-    let order = resolve_node_order(graph);
+    let (order, start_node) = resolve_node_order(graph);
     let total_nodes = order.len();
     let mut created: BTreeSet<String> = BTreeSet::new();
+    // Collect conditional routing for post-processing: node_id → full routes with action_ids.
+    let mut conditional_routing: BTreeMap<String, Vec<ResolvedRoute>> = BTreeMap::new();
+
+    // Load i18n en.json for inlining into card_spec (flow engine doesn't resolve assets).
+    let i18n_inline = load_i18n_inline(workspace_root);
 
     eprintln!(
         "[flow] Adding {total_nodes} nodes to flow '{}'...",
@@ -123,8 +128,7 @@ fn generate_flow_with_cli(
             ));
             "TODO".to_string()
         };
-        let needs_interaction = !node.routes.is_empty();
-        let payload = build_card_payload(node_id, &card_path_value, needs_interaction);
+        let payload = build_card_payload(node_id, &card_path_value, custom_langs, &i18n_inline);
 
         let mut args = vec![
             "add-step".to_string(),
@@ -141,7 +145,21 @@ fn generate_flow_with_cli(
             "--allow-cycles".to_string(),
         ];
 
-        push_routing_flags(&mut args, node_id, &routes, &mut warnings);
+        // Track nodes that need conditional routing for post-processing.
+        if routes.iter().any(|r| r.action_id.is_some()) {
+            // Collect ALL routes for this node (including skipped forward refs).
+            let all_routes: Vec<ResolvedRoute> = node
+                .routes
+                .iter()
+                .map(|r| ResolvedRoute {
+                    target: r.target.clone(),
+                    action_id: r.action_id.clone(),
+                })
+                .collect();
+            conditional_routing.insert(node_id.clone(), all_routes);
+        }
+
+        push_routing_flags(&mut args, node_id, &routes, workspace_root, &mut warnings);
 
         // Auto-answer the component wizard questions:
         // 1. default_source → "2" (asset)
@@ -159,19 +177,40 @@ fn generate_flow_with_cli(
     }
     eprintln!();
 
-    let contents = fs::read_to_string(&tmp_flow)
+    let mut contents = fs::read_to_string(&tmp_flow)
         .with_context(|| format!("failed to read {}", tmp_flow.display()))?;
+
+    // Fix the start: field to point to the real root node (not the first-created leaf).
+    if let Some(ref root) = start_node {
+        contents = fix_start_node(&contents, root);
+    }
+
+    // Post-process: inject conditional routing with `condition` expressions.
+    if !conditional_routing.is_empty() {
+        contents = inject_conditional_routing(&contents, &conditional_routing);
+    }
 
     Ok((contents.trim_end().to_string(), warnings))
 }
 
-fn resolve_routes(node: &FlowNode, created: &BTreeSet<String>) -> (Vec<String>, Vec<String>) {
+struct ResolvedRoute {
+    target: String,
+    action_id: Option<String>,
+}
+
+fn resolve_routes(
+    node: &FlowNode,
+    created: &BTreeSet<String>,
+) -> (Vec<ResolvedRoute>, Vec<String>) {
     let mut routes = Vec::new();
     let mut skipped = Vec::new();
 
     for route in &node.routes {
         if created.contains(&route.target) {
-            routes.push(route.target.clone());
+            routes.push(ResolvedRoute {
+                target: route.target.clone(),
+                action_id: route.action_id.clone(),
+            });
         } else {
             skipped.push(route.target.clone());
         }
@@ -180,8 +219,15 @@ fn resolve_routes(node: &FlowNode, created: &BTreeSet<String>) -> (Vec<String>, 
     (routes, skipped)
 }
 
-fn resolve_node_order(graph: &FlowGraph) -> Vec<String> {
-    let mut indegree: BTreeMap<String, usize> =
+/// Returns (creation_order, start_node).
+/// Creation order is leaf-first so that `greentic-flow add-step` targets exist.
+/// Start node is the real root (0 incoming edges, prefer "welcome").
+fn resolve_node_order(graph: &FlowGraph) -> (Vec<String>, Option<String>) {
+    // outgoing_count: used for leaf-first creation order.
+    let mut outgoing_count: BTreeMap<String, usize> =
+        graph.nodes.keys().map(|key| (key.clone(), 0)).collect();
+    // incoming_count: used for detecting the real root/start node.
+    let mut incoming_count: BTreeMap<String, usize> =
         graph.nodes.keys().map(|key| (key.clone(), 0)).collect();
     let mut dependents: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
@@ -190,7 +236,8 @@ fn resolve_node_order(graph: &FlowGraph) -> Vec<String> {
             if !graph.nodes.contains_key(&route.target) {
                 continue;
             }
-            *indegree.entry(node.name.clone()).or_insert(0) += 1;
+            *outgoing_count.entry(node.name.clone()).or_insert(0) += 1;
+            *incoming_count.entry(route.target.clone()).or_insert(0) += 1;
             dependents
                 .entry(route.target.clone())
                 .or_default()
@@ -198,7 +245,8 @@ fn resolve_node_order(graph: &FlowGraph) -> Vec<String> {
         }
     }
 
-    let mut queue: Vec<String> = indegree
+    // Leaf-first creation order (nodes with 0 outgoing edges first).
+    let mut queue: Vec<String> = outgoing_count
         .iter()
         .filter_map(|(node, count)| {
             if *count == 0 {
@@ -215,7 +263,7 @@ fn resolve_node_order(graph: &FlowGraph) -> Vec<String> {
         ordered.push(node.clone());
         if let Some(children) = dependents.get(&node) {
             for child in children {
-                if let Some(entry) = indegree.get_mut(child) {
+                if let Some(entry) = outgoing_count.get_mut(child) {
                     *entry = entry.saturating_sub(1);
                     if *entry == 0 {
                         queue.push(child.clone());
@@ -237,29 +285,68 @@ fn resolve_node_order(graph: &FlowGraph) -> Vec<String> {
         ordered.extend(remaining);
     }
 
-    ordered
+    // Detect the real start node: 0 incoming edges, prefer "welcome".
+    let roots: Vec<String> = incoming_count
+        .iter()
+        .filter_map(|(node, count)| {
+            if *count == 0 {
+                Some(node.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Determine the start node. Cards may have nested ActionSets whose routes aren't
+    // tracked in incoming edges, so always prefer a "welcome" node as the start.
+    let start_node = graph
+        .nodes
+        .keys()
+        .find(|n| n.contains("welcome"))
+        .cloned()
+        .or_else(|| roots.first().cloned())
+        .or_else(|| graph.nodes.keys().next().cloned());
+    (ordered, start_node)
 }
 
-fn build_card_payload(node_id: &str, card_path: &str, needs_interaction: bool) -> String {
+fn build_card_payload(
+    node_id: &str,
+    card_path: &str,
+    custom_langs: Option<&[String]>,
+    i18n_inline: &Option<serde_json::Value>,
+) -> String {
     let mut input = serde_json::Map::new();
     input.insert("card_source".to_string(), json!("asset"));
-    input.insert("card_spec".to_string(), json!({ "asset_path": card_path }));
+    let mut card_spec = json!({
+        "asset_path": card_path,
+        "i18n_bundle_path": "assets/i18n"
+    });
+    // Inline i18n translations so the component doesn't depend on host asset resolution.
+    if let Some(inline) = i18n_inline {
+        card_spec["i18n_inline"] = inline.clone();
+    }
+    input.insert("card_spec".to_string(), card_spec);
     input.insert("mode".to_string(), json!("renderAndValidate"));
     input.insert("node_id".to_string(), json!(node_id));
     input.insert("payload".to_string(), json!({}));
     input.insert("session".to_string(), json!({}));
     input.insert("state".to_string(), json!({}));
     input.insert("validation_mode".to_string(), json!("warn"));
-    if needs_interaction {
-        input.insert(
-            "interaction".to_string(),
-            json!({
-                "action_id": "action-1",
-                "card_instance_id": node_id,
-                "interaction_type": "Submit",
-                "raw_inputs": {}
-            }),
-        );
+
+    // i18n config for the component runtime.
+    input.insert("multilingual".to_string(), json!(true));
+    if let Some(langs) = custom_langs {
+        input.insert("language_mode".to_string(), json!("custom"));
+        // Always include "en" as source locale.
+        let mut all_locales: Vec<&str> = vec!["en"];
+        for lang in langs {
+            if lang != "en" {
+                all_locales.push(lang);
+            }
+        }
+        input.insert("supported_locales".to_string(), json!(all_locales));
+    } else {
+        input.insert("language_mode".to_string(), json!("all"));
     }
     let call_payload = serde_json::Value::Object(input.clone());
     let mut call = serde_json::Map::new();
@@ -274,25 +361,28 @@ fn build_card_payload(node_id: &str, card_path: &str, needs_interaction: bool) -
 fn push_routing_flags(
     args: &mut Vec<String>,
     node_id: &str,
-    routes: &[String],
+    routes: &[ResolvedRoute],
+    _workspace_root: &Path,
     warnings: &mut Vec<Warning>,
 ) {
-    match routes.len() {
-        0 => {
-            warnings.push(warning(
-                WarningKind::MissingTarget,
-                format!("no routes for {}; using routing-out", node_id),
-            ));
-            args.push("--routing-out".to_string());
-        }
-        1 => {
-            args.push("--routing-next".to_string());
-            args.push(routes[0].clone());
-        }
-        _ => {
-            args.push("--routing-multi-to".to_string());
-            args.push(routes.join(","));
-        }
+    if routes.is_empty() {
+        warnings.push(warning(
+            WarningKind::MissingTarget,
+            format!("no routes for {}; using routing-out", node_id),
+        ));
+        args.push("--routing-out".to_string());
+        return;
+    }
+
+    // Use simple routing for greentic-flow add-step (it doesn't support `condition`).
+    // Conditional routing with action_ids is applied in post-processing.
+    let targets: Vec<String> = routes.iter().map(|r| r.target.clone()).collect();
+    if targets.len() == 1 {
+        args.push("--routing-next".to_string());
+        args.push(targets[0].clone());
+    } else {
+        args.push("--routing-multi-to".to_string());
+        args.push(targets.join(","));
     }
 }
 
@@ -339,6 +429,116 @@ fn run_greentic_flow_with_stdin(args: &[String], stdin_data: &str) -> Result<()>
         );
     }
     Ok(())
+}
+
+/// Replaces simple multi-target routing with conditional routing based on action_ids.
+/// Rewrites the YAML `routing:` section for nodes that have conditional routes.
+fn inject_conditional_routing(
+    contents: &str,
+    conditional_routing: &BTreeMap<String, Vec<ResolvedRoute>>,
+) -> String {
+    let lines: Vec<&str> = contents.lines().collect();
+    let mut result = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i];
+
+        // Detect a node header like "  welcome_card:" at indent level 2.
+        let trimmed = line.trim_start();
+        if let Some(node_id) = trimmed.strip_suffix(':')
+            && let Some(routes) = conditional_routing.get(node_id)
+        {
+            // Found a node with conditional routing. Copy the node header.
+            result.push(line.to_string());
+            i += 1;
+
+            // Find and replace the `routing:` block for this node.
+            let node_indent = line.len() - trimmed.len();
+            while i < lines.len() {
+                let inner = lines[i];
+                let inner_trimmed = inner.trim_start();
+                let inner_indent = inner.len() - inner_trimmed.len();
+
+                // If we've exited the node's scope, stop.
+                if !inner_trimmed.is_empty() && inner_indent <= node_indent {
+                    break;
+                }
+
+                if inner_trimmed.starts_with("routing:") {
+                    // Replace the routing block.
+                    let routing_indent = inner_indent;
+                    let entry_indent = " ".repeat(routing_indent);
+                    let field_indent = " ".repeat(routing_indent + 2);
+
+                    result.push(format!("{}routing:", " ".repeat(routing_indent)));
+                    for route in routes {
+                        if let Some(action_id) = &route.action_id {
+                            result.push(format!(
+                                    "{entry_indent}- condition: \"response.action == \\\"{action_id}\\\"\""
+                                ));
+                            result.push(format!("{field_indent}to: {}", route.target));
+                        } else {
+                            result.push(format!("{entry_indent}- to: {}", route.target));
+                        }
+                    }
+                    i += 1;
+
+                    // Skip old routing entries: list items at routing_indent (`- ...`)
+                    // and any deeper continuation lines.
+                    while i < lines.len() {
+                        let next = lines[i];
+                        let next_trimmed = next.trim_start();
+                        let next_indent = next.len() - next_trimmed.len();
+                        if next_trimmed.is_empty() {
+                            i += 1;
+                        } else if next_indent > routing_indent {
+                            // Deeper content (part of old routing)
+                            i += 1;
+                        } else if next_indent == routing_indent && next_trimmed.starts_with("- ") {
+                            // Same-level list entry (old routing item)
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                } else {
+                    result.push(inner.to_string());
+                    i += 1;
+                }
+            }
+            continue;
+        }
+
+        result.push(line.to_string());
+        i += 1;
+    }
+
+    result.join("\n") + "\n"
+}
+
+/// Load i18n en.json from the workspace and wrap it as `{"en": {...}}` for inline embedding.
+fn load_i18n_inline(workspace_root: &Path) -> Option<serde_json::Value> {
+    let en_path = workspace_root.join("assets").join("i18n").join("en.json");
+    let raw = fs::read_to_string(&en_path).ok()?;
+    let bundle: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    Some(json!({ "en": bundle }))
+}
+
+fn fix_start_node(contents: &str, root: &str) -> String {
+    // Replace `start: <whatever>` with `start: <root>` in the YAML.
+    let mut result = String::with_capacity(contents.len());
+    for line in contents.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("start:") {
+            let indent = &line[..line.len() - trimmed.len()];
+            result.push_str(&format!("{indent}start: {root}"));
+        } else {
+            result.push_str(line);
+        }
+        result.push('\n');
+    }
+    result
 }
 
 fn replace_generated_block(existing: &str, block: &str) -> String {
