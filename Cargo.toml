@@ -22,9 +22,3 @@ which = "8"
 [dev-dependencies]
 assert_cmd = "2"
 tempfile = "3"
-
-# === TEMPORARY: TASK-082 Bug 3 cross-submodule development ===
-# Points greentic-types to the local worktree so greentic-types changes
-# are picked up before they're published to crates.io. Revert before merge.
-[patch.crates-io]
-greentic-types = { path = "../greentic-types" }
