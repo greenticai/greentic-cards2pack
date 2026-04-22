@@ -345,6 +345,11 @@ fn populate_pack_yaml_assets(workspace_root: &Path) -> Result<()> {
         return Ok(());
     }
 
+    // Paths in pack.yaml's `assets:` list must be relative to the `assets/`
+    // directory (not the workspace root). greentic-pack's builder prepends
+    // `assets/` to each entry when assembling the .gtpack, so a leading
+    // `assets/` in the value here would produce `assets/assets/...` duplicates
+    // alongside the auto-scanned copies in the final archive.
     let mut asset_entries: Vec<YamlValue> = Vec::new();
     for entry in WalkDir::new(&assets_dir)
         .sort_by_file_name()
@@ -356,7 +361,7 @@ fn populate_pack_yaml_assets(workspace_root: &Path) -> Result<()> {
         }
         let rel = entry
             .path()
-            .strip_prefix(workspace_root)
+            .strip_prefix(&assets_dir)
             .unwrap_or(entry.path());
         let rel_str = rel.to_string_lossy().replace('\\', "/");
         let mut map = serde_yaml_bw::Mapping::new();
