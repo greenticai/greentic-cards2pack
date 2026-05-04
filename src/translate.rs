@@ -313,9 +313,18 @@ fn resolve_translator_bin() -> String {
 fn translate_to_language(config: &TranslateConfig, lang: &str, en_bundle: &Path) -> Result<()> {
     let bin = resolve_translator_bin();
 
-    // Use a per-language temp directory so parallel translator processes
-    // don't clobber each other's state files.
-    let work_dir = std::env::temp_dir().join(format!("cards2pack-translate-{lang}"));
+    // Use a per-process, per-language temp directory so parallel translator
+    // processes don't clobber each other's state files. The PID scope is
+    // required because two concurrent `greentic-cards2pack generate` invocations
+    // (or parallel cargo tests spawning this binary) translating the same
+    // language would otherwise share the work dir, and one process's
+    // `remove_dir_all` at the end of `translate_to_language` could clobber the
+    // other's spawn — making the translator fail with a "cwd does not exist"
+    // error and silently dropping the output bundle.
+    let work_dir = std::env::temp_dir().join(format!(
+        "cards2pack-translate-{}-{lang}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&work_dir)
         .with_context(|| format!("failed to create translator work dir for {lang}"))?;
 
