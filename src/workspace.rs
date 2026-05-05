@@ -25,11 +25,11 @@ use crate::tools::{
 use crate::translate::{self, TranslateConfig, run_auto_translate};
 use serde_yaml_bw::{self, Value as YamlValue};
 
-const COMPONENT_REF: &str = "oci://ghcr.io/greenticai/components/component-adaptive-card:latest";
+const COMPONENT_REF: &str = "oci://ghcr.io/greenticai/components/component-adaptive-card:stable";
 const COMPONENT_MANIFEST_ENV: &str = "GREENTIC_COMPONENT_ADAPTIVE_CARD_MANIFEST";
 const COMPONENT_WASM_ENV: &str = "GREENTIC_COMPONENT_ADAPTIVE_CARD_WASM";
 const PROMPT_COMPONENT_REF: &str =
-    "oci://ghcr.io/greenticai/components/component-prompt2flow:latest";
+    "oci://ghcr.io/greenticai/components/component-prompt2flow:stable";
 const PACK_I18N_LOCALES: &[&str] = &[
     "ar", "ar-AE", "ar-DZ", "ar-EG", "ar-IQ", "ar-MA", "ar-SA", "ar-SD", "ar-SY", "ar-TN", "ay",
     "bg", "bn", "cs", "da", "de", "el", "en", "en-GB", "es", "et", "fa", "fi", "fr", "gn", "gu",
