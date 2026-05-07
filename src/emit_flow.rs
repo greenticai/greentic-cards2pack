@@ -13,7 +13,7 @@ use crate::ir::{Warning, WarningKind};
 
 const BEGIN_MARKER: &str = "# BEGIN GENERATED (cards2pack)";
 const END_MARKER: &str = "# END GENERATED (cards2pack)";
-const COMPONENT_REF: &str = "oci://ghcr.io/greenticai/components/component-adaptive-card:latest";
+const COMPONENT_REF: &str = "oci://ghcr.io/greenticai/components/component-adaptive-card:stable";
 
 pub fn emit_flow(
     graph: &FlowGraph,
