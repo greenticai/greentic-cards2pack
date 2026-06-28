@@ -6,26 +6,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `greentic-cards2pack` is a CLI tool that generates Greentic pack workspaces and `.gtpack` archives from Adaptive Card JSON files. It scans cards, builds a dependency graph, generates flow files (`.ygtc`), and packages everything into a deployable Greentic pack.
 
+## Toolchain
+
+Rust 1.94.0 pinned via `rust-toolchain.toml`. Do not edit per-repo — managed by workspace `sync-toolchain.sh`.
+
 ## Build & Development Commands
 
 ```bash
+# Local CI gate (fmt + clippy + test + gtests; installs greentic-flow/pack via binstall)
+bash ci/local_check.sh
+
 # Build
 cargo build
 cargo build --release
 
 # Run tests
-cargo test --workspace --all-features
+cargo test --all-features
 
 # Run a single test
 cargo test test_name
 
 # Lint
 cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 
 # Run integration tests (gtests)
 greentic-integration-tester run --gtest tests/gtests/smoke --artifacts-dir artifacts/gtests --workdir .
 ```
+
+**Note:** This repo is a single crate, not a Cargo workspace. The `component-prompt2flow/` subcrate is independent (see WASM Component section).
 
 ## Required External Tools
 
@@ -39,6 +48,11 @@ Install via:
 cargo binstall greentic-flow greentic-pack greentic-i18n-translator greentic-integration-tester
 ```
 
+## Gotchas
+
+- **YAML parser:** This crate depends on `serde_yaml_bw` (the hardened `serde_yaml_gtc` fork), NOT upstream `serde_yaml`. Using the wrong crate will compile but may behave differently.
+- **Not a Cargo workspace:** `cargo test --workspace` is equivalent to `cargo test` here. The `component-prompt2flow/` subcrate must be built separately from its own directory.
+
 ## Architecture
 
 ### Pipeline Flow
@@ -47,10 +61,10 @@ cargo binstall greentic-flow greentic-pack greentic-i18n-translator greentic-int
 Adaptive Cards (JSON) → scan → graph → emit_flow → greentic-pack → .gtpack
 ```
 
-1. **scan.rs** - Scans card directory, parses JSON, extracts card metadata (cardId, flow, actions)
+1. **scan.rs** - Scans card directory, parses JSON, extracts card metadata (cardId, flow, actions, routeToCardId)
 2. **ir.rs** - Intermediate representation structs (CardDoc, FlowGroup, Manifest, Warning)
 3. **graph.rs** - Builds FlowGraph with nodes and routing edges from scanned cards
-4. **emit_flow.rs** - Generates `.ygtc` flow files using `greentic-flow` CLI
+4. **emit_flow.rs** - Generates `.ygtc` flow files using `greentic-flow` CLI; auto-answers wizard prompts; injects conditional routing
 5. **workspace.rs** - Orchestrates the full generation pipeline, calls external tools
 6. **tools.rs** - Wrappers for `greentic-pack` subcommands
 7. **diagnostics.rs** - Diagnostic reporting: warnings summary, workspace stats
@@ -83,6 +97,10 @@ Defined in `src/cli.rs`:
 - Generated sections are wrapped in `# BEGIN GENERATED (cards2pack)` / `# END GENERATED` markers
 - Developer content outside markers is preserved across regenerations
 
+**Conditional Routing (routeToCardId):**
+- When a card action's data includes `routeToCardId`, the emitter generates condition-based routing in the flow YAML instead of simple next-node routing
+- `emit_flow.rs::inject_conditional_routing` rewrites the `routing:` section for nodes with conditional routes, keyed by `action_id`
+
 **Strict Mode (`--strict`):**
 - Missing targets cause errors instead of stub node creation
 - Duplicate cardIds cause errors
@@ -90,9 +108,9 @@ Defined in `src/cli.rs`:
 
 ### WASM Component
 
-`component-prompt2flow/` is a separate WASM component (target `wasm32-wasip2`) for prompt-based routing. Build with:
+`component-prompt2flow/` is a separate WASM component (target `wasm32-wasip2`) for prompt-based routing. It is **not** a workspace member of the root crate — build it from its own directory:
 ```bash
-cargo build -p component-prompt2flow --target wasm32-wasip2 --release
+cd component-prompt2flow && cargo build --target wasm32-wasip2 --release
 ```
 
 ## Environment Variables
