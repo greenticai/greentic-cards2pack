@@ -17,7 +17,7 @@ jobs:
   ci:
     uses: greenticai/.github/.github/workflows/host-crate-ci.yml@main
     with:
-      setup-script: "if ! command -v cargo-binstall >/dev/null 2>&1; then cargo install cargo-binstall --locked; fi && cargo binstall -y greentic-flow --force"
+      setup-script: "if ! command -v cargo-binstall >/dev/null 2>&1; then cargo install cargo-binstall --locked; fi && cargo binstall -y greentic-flow --force --locked"
 
   gtests:
     runs-on: ubuntu-latest
@@ -40,9 +40,9 @@ jobs:
           fi
       - name: Install greentic tools
         run: |
-          cargo binstall -y greentic-flow --force
-          cargo binstall -y greentic-pack --force
-          cargo binstall -y greentic-integration-tester --force
+          cargo binstall -y greentic-flow --force --locked
+          cargo binstall -y greentic-pack --force --locked
+          cargo binstall -y greentic-integration-tester --force --locked
       - name: Run gtests
         run: greentic-integration-tester run --gtest tests/gtests/smoke --artifacts-dir artifacts/gtests --workdir .
         continue-on-error: true
@@ -61,9 +61,9 @@ jobs:
           fi
       - name: Install greentic tools
         run: |
-          cargo binstall -y greentic-flow --force
-          cargo binstall -y greentic-pack --force
-          cargo binstall -y greentic-i18n-translator --force
+          cargo binstall -y greentic-flow --force --locked
+          cargo binstall -y greentic-pack --force --locked
+          cargo binstall -y greentic-i18n-translator --force --locked
       - name: Run translate integration tests
         run: GREENTIC_TRANSLATE_INTEGRATION=1 cargo test --test translate_integration
         continue-on-error: true
