@@ -86,12 +86,7 @@ jobs:
             archive: zip
             exe: .exe
             binary: greentic-cards2pack.exe
-          - target: x86_64-apple-darwin
-            runs-on: macos-15-intel
-            archive: tar.gz
-            exe: ""
-            binary: greentic-cards2pack
-            # If macos-15-intel is unavailable, switch runs-on to macos-15-large.
+          # Intel macOS built on demand at release time, not in CI — org macOS-Intel policy.
           - target: aarch64-apple-darwin
             runs-on: macos-15
             archive: tar.gz
