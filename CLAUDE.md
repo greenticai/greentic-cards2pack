@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Toolchain
 
-Rust 1.94.0 pinned via `rust-toolchain.toml`. Do not edit per-repo — managed by workspace `sync-toolchain.sh`.
+Rust 1.95.0 pinned via `rust-toolchain.toml`. Do not edit per-repo — managed by workspace `sync-toolchain.sh`.
 
 ## Build & Development Commands
 
@@ -50,7 +50,7 @@ cargo binstall greentic-flow greentic-pack greentic-i18n-translator greentic-int
 
 ## Gotchas
 
-- **YAML parser:** This crate depends on `serde_yaml_bw` (the hardened `serde_yaml_gtc` fork), NOT upstream `serde_yaml`. Using the wrong crate will compile but may behave differently.
+- **YAML parser:** This crate depends on `serde_yaml_bw` (a hardened `serde_yaml` fork from crates.io — a different crate from the `serde_yaml_gtc` that other Greentic repos import under the same `serde_yaml_bw` alias), NOT upstream `serde_yaml`. Using the wrong crate will compile but may behave differently.
 - **Not a Cargo workspace:** `cargo test --workspace` is equivalent to `cargo test` here. The `component-prompt2flow/` subcrate must be built separately from its own directory.
 
 ## Architecture
