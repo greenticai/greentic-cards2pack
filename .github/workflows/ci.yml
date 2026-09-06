@@ -17,7 +17,7 @@ jobs:
   ci:
     uses: greenticai/.github/.github/workflows/host-crate-ci.yml@main
     with:
-      setup-script: "if ! command -v cargo-binstall >/dev/null 2>&1; then cargo install cargo-binstall --locked; fi && cargo binstall -y greentic-flow --force --locked"
+      setup-script: "if ! command -v cargo-binstall >/dev/null 2>&1; then ( set -o pipefail; curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash ); fi && cargo binstall -y greentic-flow --force --locked"
 
   gtests:
     runs-on: ubuntu-latest
@@ -36,7 +36,7 @@ jobs:
       - name: Install cargo-binstall
         run: |
           if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
+            ( set -o pipefail; curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash )
           fi
       - name: Install greentic tools
         run: |
@@ -57,7 +57,7 @@ jobs:
       - name: Install cargo-binstall
         run: |
           if ! command -v cargo-binstall >/dev/null 2>&1; then
-            cargo install cargo-binstall --locked
+            ( set -o pipefail; curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash )
           fi
       - name: Install greentic tools
         run: |
